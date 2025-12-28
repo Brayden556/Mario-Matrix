@@ -143,7 +143,7 @@ Mario-Matrix/
 - 🎁 Delivered as a physical gift
 - 🚧 v2 planned (engine polish, new content, hardware refinements)
 
-This repository represents the **v1 shipped build**.
+This repository represents the **v1 gifted build**.
 
 ---
 
