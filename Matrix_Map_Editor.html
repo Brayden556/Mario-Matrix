@@ -1,0 +1,2141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mario Matrix – Tile Map Editor (Header-Aware)</title>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      gap: 16px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    #left {
+      flex: 0 0 auto;
+    }
+    #right {
+      flex: 0 0 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    canvas {
+      border: 1px solid #555;
+      image-rendering: pixelated;
+      cursor: crosshair;
+      background: #000;
+      display: block;
+    }
+    h2 {
+      margin: 4px 0;
+      font-size: 16px;
+    }
+    h3 {
+      margin: 4px 0;
+      font-size: 13px;
+      color: #ccc;
+    }
+    .tile-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 210px;
+      overflow-y: auto;
+      border: 1px solid #333;
+      padding: 4px;
+      border-radius: 4px;
+      background: #151515;
+    }
+    .tile-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      cursor: pointer;
+      font-size: 12px;
+      background: #111;
+    }
+    .tile-option.selected {
+      border-color: #fff;
+      box-shadow: 0 0 4px #fff;
+      background: #222;
+    }
+    .tile-preview {
+      width: 32px;
+      height: 32px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: #000;
+      flex: 0 0 auto;
+    }
+    button {
+      background: #333;
+      color: #eee;
+      border: 1px solid #666;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover {
+      background: #444;
+    }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      box-sizing: border-box;
+    }
+    label {
+      font-size: 12px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="range"],
+    select {
+      font-size: 12px;
+      background: #000;
+      color: #eee;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 2px 4px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .category-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .cat-btn {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #222;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .cat-btn.active {
+      border-color: #fff;
+      background: #444;
+    }
+    small {
+      font-size: 11px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="left">
+    <canvas id="mapCanvas"></canvas>
+    <div style="margin-top:6px;">
+      <label>
+        Scroll X (tiles):
+        <input type="range" id="scrollX" min="0" max="0" value="0">
+        <span id="scrollXLabel">0</span>
+      </label>
+      <label style="margin-left:12px;">
+        Scroll Y (tiles):
+        <input type="range" id="scrollY" min="0" max="0" value="0">
+        <span id="scrollYLabel">0</span>
+      </label>
+      <div style="margin-top:4px;">
+        <label>
+          Zoom:
+          <select id="zoomSelect">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+          </select>
+        </label>
+        <button id="overviewBtn" style="margin-left:12px;">Toggle Overview</button>
+      </div>
+      <div style="font-size:11px;color:#aaa;margin-top:2px;">
+        Map: 240×32 tiles (10 screens × 4 screens). Viewport: 24×8 tiles.
+      </div>
+    </div>
+  </div>
+
+  <div id="right">
+    <h2>Tile palette</h2>
+    <div class="category-tabs">
+      <button class="cat-btn active" data-tab="Ground">Ground</button>
+      <button class="cat-btn" data-tab="Slopes &amp; Cliffs">Slopes &amp; Cliffs</button>
+      <button class="cat-btn" data-tab="Decor">Decor</button>
+      <button class="cat-btn" data-tab="Hazards">Hazards</button>
+      <button class="cat-btn" data-tab="Pipes &amp; Tunnels">Pipes &amp; Tunnels</button>
+      <button class="cat-btn" data-tab="Underground">Underground</button>
+      <button class="cat-btn" data-tab="Goals">Goals</button>
+      <button class="cat-btn" data-tab="Checkpoints">Checkpoints</button>
+      <button class="cat-btn" data-tab="Blocks">Blocks</button>
+      <button class="cat-btn" data-tab="Items">Items</button>
+      <button class="cat-btn" data-tab="Enemies">Enemies</button>
+      <button class="cat-btn" data-tab="Markers">Markers</button>
+    </div>
+    <div class="tile-list" id="tileList"></div>
+
+    <h2>Map settings & export</h2>
+    <div class="row">
+      <label>Map name:
+        <input type="text" id="mapName" value="Map_Build" />
+      </label>
+    </div>
+    <div style="font-size:11px;color:#aaa;margin-top:2px;">
+      Map size: 240 × 32 tiles (fixed for this world)
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <button id="exportMapBtn">Export C array (tile IDs)</button>
+    </div>
+
+    <textarea id="exportText" spellcheck="false" placeholder="// C export will appear here..."></textarea>
+
+    <h3>Import existing map</h3>
+    <small>
+      Paste a C array like <code>static const uint8_t Level1_Map[ROWS][COLS] PROGMEM = { ... };</code>  
+      It will overwrite the current map. Old 16×240 exports are auto-upgraded by bottom-aligning and adding empty rows above.
+    </small>
+    <textarea id="importMapText" spellcheck="false" placeholder="// Paste exported tile map here..."></textarea>
+    <div class="row" style="margin-top:4px;">
+      <button id="importMapBtn">Import map from C array</button>
+    </div>
+
+    <h3 style="margin-top:12px;">Danger zone</h3>
+    <div class="row">
+      <button id="clearMapBtn" style="background:#600;border-color:#900;">Clear map (all empty)</button>
+    </div>
+  </div>
+
+  <script>
+    // ================================
+    // VISUAL SCALE & MAP DIMENSIONS
+    // ================================
+    const PIXEL_SCALE = 3;          // 3× bigger: 8px tile → 24px on screen
+    const BASE_TILE_PIXELS = 8;
+    const TILE_SIZE_PX = BASE_TILE_PIXELS * PIXEL_SCALE;
+
+    const VIEW_TILES_W = 24;        // viewport width in tiles (24×8 = 192px matrix)
+    const VIEW_TILES_H = 8;         // viewport height in tiles
+
+    const MAP_TILES_W = 240;        // total map width (10 screens × 24 tiles)
+    const MAP_TILES_H = 32;         // total map height (4 screens × 8 tiles)
+
+    // canvas sized dynamically based on zoom and overview mode
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let viewOffsetX = 0;  // viewport offset in tiles (X)
+    let viewOffsetY = MAP_TILES_H - VIEW_TILES_H;  // default to bottom (ground level)
+    let zoomFactor = 1.0; // current zoom (0.5, 1, 2)
+    let isOverviewMode = false; // if true, show entire 240×32 map
+
+    function updateCanvasSize() {
+      if (isOverviewMode) {
+        // Show entire map: fit 240×32 tiles into reasonable canvas size
+        const overviewScale = 2; // 2px per tile pixel
+        canvas.width = MAP_TILES_W * BASE_TILE_PIXELS * overviewScale;
+        canvas.height = MAP_TILES_H * BASE_TILE_PIXELS * overviewScale;
+      } else {
+        // Normal viewport: 24×8 tiles at current zoom
+        canvas.width = VIEW_TILES_W * TILE_SIZE_PX * zoomFactor;
+        canvas.height = VIEW_TILES_H * TILE_SIZE_PX * zoomFactor;
+      }
+    }
+
+    updateCanvasSize();
+
+    // ===================================
+    // PALETTE (must match Arduino indices)
+    // ===================================
+    const palette = [
+      "#000000", // 0 - off
+      "#FFD2AA", // 1 - skin
+      "#E42020", // 2 - red
+      "#783C0A", // 3 - brown
+      "#006EDC", // 4 - blue
+      "#FFDC46", // 5 - yellow
+      "#FFFFFF", // 6 - white
+      "#808080", // 7 - gray
+      "#00FF00", // 8 - debug green
+      "#FF00FF", // 9 - magenta
+      "#7AC8FF", // 10 - sky light
+      "#4FA0FF", // 11 - sky mid / haze
+      "#3C80E0", // 12 - distant hills
+      "#F0D090", // 13 - dirt light
+      "#D0A060", // 14 - dirt mid
+      "#A07040", // 15 - dirt dark / spots
+      "#404070", // 16 - underground stone dark
+      "#7070A0", // 17 - underground stone mid
+      "#40C860", // 18 - pipe green light
+      "#208040", // 19 - pipe green dark
+      "#101010", // 20 - near-black
+      "#C0C0C0", // 21 - metal gray
+      "#E85870", // 22 - mouth pink/red
+      "#20B060"  // 23 - grass highlight
+    ];
+
+    // ===================================
+    // TILE DATA STRUCTURE
+    // ===================================
+    const CATEGORY_TERRAIN = "Terrain";
+    const CATEGORY_BRICK   = "Brick";
+    const CATEGORY_ITEM    = "Item";
+    const CATEGORY_MOB     = "Mob";
+
+    // Shared IDs (must match Map_Build.h)
+    const TILE_ID_MOB_PIRANHA_PLANT_L = 45;
+    const TILE_ID_MOB_PIRANHA_PLANT_R = 46;
+    // Legacy alias (older exports used a single ID)
+    const TILE_ID_MOB_PIRANHA_PLANT = TILE_ID_MOB_PIRANHA_PLANT_L;
+
+    // Overlay marker: Mario spawn point (only one allowed)
+    const TILE_ID_MOB_MARIO_SPAWN = 47;
+
+    // Checkpoint flags (base terrain tiles; visual-only for now)
+    const TILE_ID_CHECK_POINT = 48;
+    const TILE_ID_CHECKED_POINT = 49;
+
+    // Mob spawn tiles (base terrain tiles)
+    const TILE_ID_MOB_KOOPA_TROOPA = 57;
+
+    // Green Tunnel (Left Entrance) (must match Map_Build.h)
+    const TILE_ID_GREEN_TUNNEL_LEFT = 32;
+
+    // Named tunnel variants (must match Map_Build.h)
+    const TILE_ID_GREEN_TUNNEL_1_2 = 41;
+    const TILE_ID_GREEN_TUNNEL_DOWN_2_2 = 59;
+    const TILE_ID_GREEN_TUNNEL_LEFT_2_4 = 60;
+    const TILE_ID_GREEN_TUNNEL_4_4 = 61;
+
+    /**
+     * allTiles: array of { id, name, category, data[8][8] }
+     * id is the tile ID used in tileMap and exports.
+     */
+    let allTiles = [];
+
+    // Always keep tile 0 as EMPTY
+    function makeEmptyTile() {
+      const data = Array.from({ length: 8 }, () => Array(8).fill(0));
+      return {
+        id: 0,
+        name: "EMPTY",
+        displayName: "EMPTY (Eraser)",
+        category: CATEGORY_TERRAIN,
+        paletteTab: "Ground",
+        data
+      };
+    }
+
+    // ===================================
+    // MAP DATA: 2D grid of tile IDs
+    // ===================================
+    let tileMap = createEmptyMap(MAP_TILES_W, MAP_TILES_H);
+
+    // Overlay mob placements (do NOT modify tileMap beneath)
+    // Stored as objects to match export expectations: { id, x, y }
+    let mobPlacements = [];
+
+    function upsertMobPlacement(id, x, y) {
+      const idx = mobPlacements.findIndex(m => m.x === x && m.y === y);
+      if (idx >= 0) mobPlacements[idx] = { id, x, y };
+      else mobPlacements.push({ id, x, y });
+    }
+
+    function removeMobPlacementAt(x, y) {
+      mobPlacements = mobPlacements.filter(m => !(m.x === x && m.y === y));
+    }
+
+    function getMobPlacementIdAt(x, y) {
+      const m = mobPlacements.find(p => p.x === x && p.y === y);
+      return m ? m.id : 0;
+    }
+
+    function createEmptyMap(cols, rows) {
+      const arr = [];
+      for (let y = 0; y < rows; y++) {
+        const row = [];
+        for (let x = 0; x < cols; x++) row.push(0); // 0 = EMPTY tile
+        arr.push(row);
+      }
+      return arr;
+    }
+
+    // ===================================
+    // CATEGORY & TILE LOOKUP
+    // ===================================
+    // Palette tabs are UI-only; they do not affect export or tile IDs.
+    const PALETTE_TABS = [
+      "Ground",
+      "Slopes & Cliffs",
+      "Decor",
+      "Hazards",
+      "Pipes & Tunnels",
+      "Underground",
+      "Goals",
+      "Checkpoints",
+      "Blocks",
+      "Items",
+      "Enemies",
+      "Markers"
+    ];
+
+    let currentPaletteTab = "Ground";
+    let selectedTileId = 0; // default empty until tiles load
+
+    function inferCategoryFromName(name) {
+      if (/worldCoin|Item_|Coin|Block|Powerup/i.test(name)) return CATEGORY_ITEM;
+      if (/Goomba|Koopa|Enemy|Mob/i.test(name))             return CATEGORY_MOB;
+      return CATEGORY_TERRAIN;
+    }
+
+    function getTileById(id) {
+      return allTiles.find(t => t.id === id) || allTiles[0];
+    }
+
+    function getTilesByPaletteTab(tab) {
+      return allTiles.filter(t => t.paletteTab === tab);
+    }
+
+    function deriveDisplayNameFromName(name) {
+      const explicit = {
+        "Ground_Tile_Array": "Ground",
+        "Ground_Tile_Top_Left": "Top Corner (L)",
+        "Ground_Tile_Top_Right": "Top Corner (R)",
+        "Ground_Tile_Vert_Cliff_Left": "Cliff Diagonal (L)",
+        "Ground_Tile_Vert_Cliff_Right": "Cliff Diagonal (R)",
+        "Tile_Brick_Breakable_Array": "Brick (Breakable)",
+        "Ground_Tile_Green_NoTel_Tunnel": "Pipe (No Teleport)",
+        "Ground_Tile_Green_Tunnel_Left_3_4": "Pipe Left (3×4)"
+      };
+      if (explicit[name]) return explicit[name];
+
+      // Keep already-human names as-is.
+      if (!/_/.test(name) && /[a-z]/i.test(name)) return name;
+
+      let out = name;
+      out = out.replace(/^Ground_Tile_/, "");
+      out = out.replace(/^Under_Ground_Tile_/, "Underground ");
+      out = out.replace(/^Tile_Brick_/, "Brick ");
+      out = out.replace(/^Mob_/, "");
+
+      out = out.replace(/_/g, " ");
+      out = out.replace(/\bLeft\b/, "(L)");
+      out = out.replace(/\bRight\b/, "(R)");
+      out = out.replace(/\bUp\b/, "Up");
+      out = out.replace(/\bDown\b/, "Down");
+      out = out.replace(/\s+\(L\)\s+\(R\)/g, " (L/R)");
+      out = out.replace(/\s+/g, " ").trim();
+      return out;
+    }
+
+    function getTileUiName(tile) {
+      return tile.displayName || deriveDisplayNameFromName(tile.name) || tile.name;
+    }
+
+    function getTileDrawOffset(tileId) {
+      // Return offsets in TILE PIXELS (not scaled). These match the game renderer.
+      switch (tileId) {
+        case 51: // TILE_ID_FLAG_POLE
+          return { ox: 3, oy: 0 };
+        case 50: // TILE_ID_FLAG_TOP
+          return { ox: 2, oy: 1 };
+        case TILE_ID_GREEN_TUNNEL_LEFT:
+        case TILE_ID_GREEN_TUNNEL_LEFT_2_4:
+          // Visual-only alignment: raise the left-entrance tunnel by 2px.
+          // Grid placement/export remain unchanged.
+          return { ox: 0, oy: -2 };
+        default:
+          return { ox: 0, oy: 0 };
+      }
+    }
+
+    // ===================================
+    // DRAWING TILES TO CANVAS
+    // ===================================
+    function drawTileToCanvas(tile, destTileX, destTileY, scale) {
+      const data = tile.data;
+      const tileW = tile.w || 8;
+      const tileH = tile.h || 8;
+
+      const { ox, oy } = getTileDrawOffset(tile.id);
+
+      const anchorOffsetY = (tile.anchor === "bottom")
+        ? (BASE_TILE_PIXELS - tileH)
+        : 0;
+      
+      for (let py = 0; py < tileH; py++) {
+        for (let px = 0; px < tileW; px++) {
+          const idx = data[py][px];
+          if (idx === 0) continue; // transparent
+          const color = palette[idx] || "#000000";
+          ctx.fillStyle = color;
+          ctx.fillRect(
+            destTileX * BASE_TILE_PIXELS * scale + px * scale + ox * scale,
+            destTileY * BASE_TILE_PIXELS * scale + (py + anchorOffsetY) * scale + oy * scale,
+            scale,
+            scale
+          );
+        }
+      }
+    }
+
+    // Draw an arbitrary-size sprite at world-pixel coordinates (not tile coords)
+    // worldOriginX/Y are world-pixel offsets (used for viewport scrolling)
+    function drawSpriteAtWorldPixels(tile, worldPx, worldPy, scale, worldOriginX = 0, worldOriginY = 0) {
+      const data = tile.data;
+      const w = tile.w || 8;
+      const h = tile.h || 8;
+      const canvasX0 = (worldPx - worldOriginX) * scale;
+      const canvasY0 = (worldPy - worldOriginY) * scale;
+
+      for (let py = 0; py < h; py++) {
+        for (let px = 0; px < w; px++) {
+          const idx = data[py][px];
+          if (idx === 0) continue;
+          const color = palette[idx] || "#000000";
+          ctx.fillStyle = color;
+          ctx.fillRect(canvasX0 + px * scale, canvasY0 + py * scale, scale, scale);
+        }
+      }
+    }
+
+    function drawOverlayMobs() {
+      if (!mobPlacements.length) return;
+
+      if (isOverviewMode) {
+        const overviewScale = 2;
+        const originX = 0;
+        const originY = 0;
+        mobPlacements.forEach(m => {
+          const tile = getTileById(m.id);
+          if (!tile) return;
+          const w = tile.w || 8;
+          const h = tile.h || 8;
+
+          // bottom anchor
+          let drawX = m.x * 8 + 4 - Math.floor(w / 2);
+          let drawY = m.y * 8 + 8 - h;
+
+          // Special alignment: Piranha is stamped across 2 tiles; draw from LEFT tile
+          if (m.id === TILE_ID_MOB_PIRANHA_PLANT_L) {
+            drawX = m.x * 8;          // centered across 2 tiles (16px), sprite left == left tile
+            drawY = m.y * 8 + 8 - h;  // bottom-align
+          }
+
+          // Feet-anchored marker: Mario Spawn occupies the marker tile (air tile).
+          // Feet sit on the BOTTOM of that tile (top of the ground below).
+          if (m.id === TILE_ID_MOB_MARIO_SPAWN) {
+            drawX = m.x * 8;
+            // +3: compensate for blank top rows in heroStand art so it doesn't look like it's hovering
+            drawY = m.y * 8 + 8 - h + 3;
+          }
+          drawSpriteAtWorldPixels(tile, drawX, drawY, overviewScale, originX, originY);
+        });
+        return;
+      }
+
+      // Normal viewport mode
+      const scale = PIXEL_SCALE * zoomFactor;
+      const originX = viewOffsetX * 8;
+      const originY = viewOffsetY * 8;
+
+      mobPlacements.forEach(m => {
+        const tile = getTileById(m.id);
+        if (!tile) return;
+        const w = tile.w || 8;
+        const h = tile.h || 8;
+
+        let drawX = m.x * 8 + 4 - Math.floor(w / 2);
+        let drawY = m.y * 8 + 8 - h;
+
+        // Special alignment: Piranha is stamped across 2 tiles; draw from LEFT tile
+        if (m.id === TILE_ID_MOB_PIRANHA_PLANT_L) {
+          drawX = m.x * 8;
+          drawY = m.y * 8 + 8 - h;
+        }
+
+        // Feet-anchored marker: Mario Spawn occupies the marker tile (air tile).
+        // Feet sit on the BOTTOM of that tile (top of the ground below).
+        if (m.id === TILE_ID_MOB_MARIO_SPAWN) {
+          drawX = m.x * 8;
+          // +3: compensate for blank top rows in heroStand art so it doesn't look like it's hovering
+          drawY = m.y * 8 + 8 - h + 3;
+        }
+
+        // Cull if completely outside viewport (cheap bounding box)
+        const left   = (drawX - originX) * scale;
+        const top    = (drawY - originY) * scale;
+        const right  = left + w * scale;
+        const bottom = top + h * scale;
+        if (right < 0 || left > canvas.width || bottom < 0 || top > canvas.height) return;
+
+        drawSpriteAtWorldPixels(tile, drawX, drawY, scale, originX, originY);
+      });
+    }
+
+    function redraw() {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (isOverviewMode) {
+        // Draw entire 240×32 map
+        const overviewScale = 2;
+        for (let mapY = 0; mapY < MAP_TILES_H; mapY++) {
+          for (let mapX = 0; mapX < MAP_TILES_W; mapX++) {
+            const tileId = tileMap[mapY][mapX];
+            const tile = getTileById(tileId);
+            drawTileToCanvas(tile, mapX, mapY, overviewScale);
+          }
+        }
+
+        // Draw grid lines every tile
+        ctx.strokeStyle = "rgba(80,80,80,0.3)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= MAP_TILES_W; x++) {
+          ctx.beginPath();
+          ctx.moveTo(x * BASE_TILE_PIXELS * overviewScale + 0.5, 0);
+          ctx.lineTo(x * BASE_TILE_PIXELS * overviewScale + 0.5, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= MAP_TILES_H; y++) {
+          ctx.beginPath();
+          ctx.moveTo(0, y * BASE_TILE_PIXELS * overviewScale + 0.5);
+          ctx.lineTo(canvas.width, y * BASE_TILE_PIXELS * overviewScale + 0.5);
+          ctx.stroke();
+        }
+      } else {
+        // Normal viewport mode
+        const scaledPixel = PIXEL_SCALE * zoomFactor;
+
+        for (let ty = 0; ty < VIEW_TILES_H; ty++) {
+          const mapY = ty + viewOffsetY;
+          if (mapY < 0 || mapY >= MAP_TILES_H) continue;
+
+          for (let tx = 0; tx < VIEW_TILES_W; tx++) {
+            const mapX = tx + viewOffsetX;
+            if (mapX < 0 || mapX >= MAP_TILES_W) continue;
+
+            const tileId = tileMap[mapY][mapX];
+            const tile = getTileById(tileId);
+
+            // Use shared draw helper so anchors (e.g., bottom) are respected
+            drawTileToCanvas(tile, tx, ty, scaledPixel);
+          }
+        }
+
+        // Draw tile grid lines
+        ctx.strokeStyle = "rgba(80,80,80,0.5)";
+        ctx.lineWidth = 1;
+        for (let tx = 0; tx <= VIEW_TILES_W; tx++) {
+          ctx.beginPath();
+          ctx.moveTo(tx * TILE_SIZE_PX * zoomFactor + 0.5, 0);
+          ctx.lineTo(tx * TILE_SIZE_PX * zoomFactor + 0.5, canvas.height);
+          ctx.stroke();
+        }
+        for (let ty = 0; ty <= VIEW_TILES_H; ty++) {
+          ctx.beginPath();
+          ctx.moveTo(0, ty * TILE_SIZE_PX * zoomFactor + 0.5);
+          ctx.lineTo(canvas.width, ty * TILE_SIZE_PX * zoomFactor + 0.5);
+          ctx.stroke();
+        }
+      }
+
+      // Always draw overlay mobs on top of the base tile map
+      drawOverlayMobs();
+    }
+
+    // ===================================
+    // TILE PALETTE UI
+    // ===================================
+    const tileListDiv = document.getElementById('tileList');
+    const catButtons = document.querySelectorAll('.cat-btn');
+
+    // Cache the list of tiles currently rendered in the palette.
+    // This avoids relying on DOM order to infer tile identities.
+    let visiblePaletteTiles = [];
+
+    catButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        catButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentPaletteTab = btn.getAttribute('data-tab') || "Ground";
+        buildTilePalette();
+      });
+    });
+
+    function buildTilePalette() {
+      tileListDiv.innerHTML = "";
+
+      // Always pin EMPTY at the top as an eraser.
+      const emptyTile = allTiles.find(t => t.id === 0);
+      const tilesInTab = getTilesByPaletteTab(currentPaletteTab);
+      const tiles = [
+        ...(emptyTile ? [emptyTile] : []),
+        ...tilesInTab.filter(t => t.id !== 0)
+      ];
+
+      visiblePaletteTiles = tiles;
+      if (tiles.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.fontSize = "11px";
+        emptyMsg.style.color = "#aaa";
+        emptyMsg.textContent = "No tiles in this category yet.";
+        tileListDiv.appendChild(emptyMsg);
+        return;
+      }
+
+      tiles.forEach(tile => {
+        const wrapper = document.createElement('div');
+        wrapper.className = "tile-option";
+        if (tile.id === selectedTileId) wrapper.classList.add("selected");
+
+        const preview = document.createElement('canvas');
+        preview.width = 32;
+        preview.height = 32;
+        preview.className = "tile-preview";
+        const pctx = preview.getContext('2d');
+
+        // Calculate scale to fit tile in 32x32 preview while maintaining aspect ratio
+        const tileW = tile.w || 8;
+        const tileH = tile.h || 8;
+        const scaleX = 32 / tileW;
+        const scaleY = 32 / tileH;
+        const scale = Math.min(scaleX, scaleY);
+        
+        // Center the tile in the preview
+        const offsetX = (32 - (tileW * scale)) / 2;
+        const offsetY = (32 - (tileH * scale)) / 2;
+
+        const { ox, oy } = getTileDrawOffset(tile.id);
+        
+        for (let py = 0; py < tileH; py++) {
+          for (let px = 0; px < tileW; px++) {
+            const idx = tile.data[py][px];
+            if (idx === 0) continue;
+            pctx.fillStyle = palette[idx] || "#000000";
+            pctx.fillRect(offsetX + (px + ox) * scale, offsetY + (py + oy) * scale, scale, scale);
+          }
+        }
+
+        const label = document.createElement('div');
+        const uiName = getTileUiName(tile);
+        label.textContent = tile.id + ": " + uiName;
+
+        wrapper.appendChild(preview);
+        wrapper.appendChild(label);
+
+        wrapper.addEventListener('click', () => {
+          selectedTileId = tile.id;
+          updateTilePaletteSelection();
+        });
+
+        tileListDiv.appendChild(wrapper);
+      });
+    }
+
+    function updateTilePaletteSelection() {
+      const children = Array.from(tileListDiv.children);
+      let childIdx = 0;
+      children.forEach(child => {
+        // skip the "No tiles" message
+        if (!child.classList.contains('tile-option')) return;
+        const tile = visiblePaletteTiles[childIdx++];
+        if (!tile) return;
+        if (tile.id === selectedTileId) child.classList.add("selected");
+        else child.classList.remove("selected");
+      });
+    }
+
+    // ===================================
+    // CANVAS INTERACTION (paint tiles)
+    // ===================================
+    let isDrawing = false;
+    let currentPaintTileId = 0;
+
+    // Prevent context menu on right-click
+    canvas.addEventListener('contextmenu', (evt) => {
+      evt.preventDefault();
+    });
+
+    function canvasToTileCoords(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = evt.clientX - rect.left;
+      const canvasY = evt.clientY - rect.top;
+
+      if (isOverviewMode) {
+        const overviewScale = 2;
+        const mapX = Math.floor(canvasX / (BASE_TILE_PIXELS * overviewScale));
+        const mapY = Math.floor(canvasY / (BASE_TILE_PIXELS * overviewScale));
+        return { mapX, mapY };
+      } else {
+        const viewTileX = Math.floor(canvasX / (TILE_SIZE_PX * zoomFactor));
+        const viewTileY = Math.floor(canvasY / (TILE_SIZE_PX * zoomFactor));
+        const mapX = viewTileX + viewOffsetX;
+        const mapY = viewTileY + viewOffsetY;
+        return { mapX, mapY };
+      }
+    }
+
+    function handlePaint(evt) {
+      const { mapX, mapY } = canvasToTileCoords(evt);
+      if (mapX < 0 || mapX >= MAP_TILES_W || mapY < 0 || mapY >= MAP_TILES_H) return;
+
+      // Universal erase mode: always clear BOTH overlay mobs and base tile.
+      // This works regardless of which category tab is active.
+      if (currentPaintTileId === 0) {
+        const existing = getMobPlacementIdAt(mapX, mapY);
+
+        // Erase overlay mobs as a pair when applicable (Piranha is 2-wide).
+        if (existing === TILE_ID_MOB_PIRANHA_PLANT_L) {
+          removeMobPlacementAt(mapX, mapY);
+          if (mapX + 1 < MAP_TILES_W && getMobPlacementIdAt(mapX + 1, mapY) === TILE_ID_MOB_PIRANHA_PLANT_R) {
+            removeMobPlacementAt(mapX + 1, mapY);
+          }
+        } else if (existing === TILE_ID_MOB_PIRANHA_PLANT_R) {
+          removeMobPlacementAt(mapX, mapY);
+          if (mapX - 1 >= 0 && getMobPlacementIdAt(mapX - 1, mapY) === TILE_ID_MOB_PIRANHA_PLANT_L) {
+            removeMobPlacementAt(mapX - 1, mapY);
+          }
+        } else {
+          // Any other overlay mob (Goomba/Koopa/Mario spawn/etc.)
+          removeMobPlacementAt(mapX, mapY);
+        }
+
+        // Also clear base map tile, in case anything ever ended up stored in tileMap.
+        tileMap[mapY][mapX] = 0;
+        redraw();
+        return;
+      }
+
+      const paintTile = getTileById(currentPaintTileId);
+
+      // Overlay mob placement: store {id,x,y} and do not modify tileMap.
+      if (paintTile && paintTile.isOverlayMob) {
+        // 2-wide stamp: place L + R
+        if (currentPaintTileId === TILE_ID_MOB_PIRANHA_PLANT_L) {
+          upsertMobPlacement(TILE_ID_MOB_PIRANHA_PLANT_L, mapX, mapY);
+          if (mapX + 1 < MAP_TILES_W) {
+            upsertMobPlacement(TILE_ID_MOB_PIRANHA_PLANT_R, mapX + 1, mapY);
+          }
+          redraw();
+          return;
+        }
+
+        // Mario spawn marker: only one allowed
+        if (currentPaintTileId === TILE_ID_MOB_MARIO_SPAWN) {
+          mobPlacements = mobPlacements.filter(m => m.id !== TILE_ID_MOB_MARIO_SPAWN);
+          upsertMobPlacement(TILE_ID_MOB_MARIO_SPAWN, mapX, mapY);
+          redraw();
+          return;
+        }
+
+        upsertMobPlacement(currentPaintTileId, mapX, mapY);
+        redraw();
+        return;
+      }
+
+      tileMap[mapY][mapX] = currentPaintTileId;
+      redraw();
+    }
+
+    canvas.addEventListener('mousedown', (evt) => {
+      // Left = 0, Right = 2
+      if (evt.button !== 0 && evt.button !== 2) return;
+
+      // Right-click ALWAYS erases, regardless of category (including Mobs)
+      if (evt.button === 2) {
+        currentPaintTileId = 0;
+      } else {
+        currentPaintTileId = selectedTileId;
+      }
+
+      isDrawing = true;
+      handlePaint(evt);
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('mousemove', (evt) => {
+      if (!isDrawing) return;
+      handlePaint(evt);
+    });
+    canvas.addEventListener('mouseup', () => { isDrawing = false; });
+    canvas.addEventListener('mouseleave', () => { isDrawing = false; });
+
+    // ===================================
+    // SCROLLBARS & ZOOM & OVERVIEW
+    // ===================================
+    const scrollXInput = document.getElementById('scrollX');
+    const scrollXLabel = document.getElementById('scrollXLabel');
+    const scrollYInput = document.getElementById('scrollY');
+    const scrollYLabel = document.getElementById('scrollYLabel');
+    const zoomSelect = document.getElementById('zoomSelect');
+    const overviewBtn = document.getElementById('overviewBtn');
+
+    function updateScrollMax() {
+      const maxOffsetX = Math.max(0, MAP_TILES_W - VIEW_TILES_W);
+      const maxOffsetY = Math.max(0, MAP_TILES_H - VIEW_TILES_H);
+      
+      scrollXInput.max = String(maxOffsetX);
+      scrollYInput.max = String(maxOffsetY);
+      
+      if (viewOffsetX > maxOffsetX) viewOffsetX = maxOffsetX;
+      if (viewOffsetY > maxOffsetY) viewOffsetY = maxOffsetY;
+      
+      scrollXInput.value = String(viewOffsetX);
+      // Invert Y scrollbar: 0 = bottom (ground), max = top (sky)
+      scrollYInput.value = String(maxOffsetY - viewOffsetY);
+      scrollXLabel.textContent = String(viewOffsetX);
+      // Display inverted value: 0 at bottom, 8 at top
+      scrollYLabel.textContent = String(maxOffsetY - viewOffsetY);
+    }
+
+    scrollXInput.addEventListener('input', () => {
+      viewOffsetX = parseInt(scrollXInput.value, 10) || 0;
+      scrollXLabel.textContent = String(viewOffsetX);
+      redraw();
+    });
+
+    scrollYInput.addEventListener('input', () => {
+      const maxOffsetY = Math.max(0, MAP_TILES_H - VIEW_TILES_H);
+      // Invert: slider value 0 (bottom) → viewOffsetY = 8, slider value 8 (top) → viewOffsetY = 0
+      const sliderValue = parseInt(scrollYInput.value, 10) || 0;
+      viewOffsetY = maxOffsetY - sliderValue;
+      scrollYLabel.textContent = String(sliderValue);
+      redraw();
+    });
+
+    zoomSelect.addEventListener('change', () => {
+      zoomFactor = parseFloat(zoomSelect.value) || 1.0;
+      updateCanvasSize();
+      redraw();
+    });
+
+    overviewBtn.addEventListener('click', () => {
+      isOverviewMode = !isOverviewMode;
+      updateCanvasSize();
+      redraw();
+    });
+
+    // ===================================
+    // CLEAR MAP
+    // ===================================
+    document.getElementById('clearMapBtn').addEventListener('click', () => {
+      if (!confirm('Are you sure you want to clear the entire map? This cannot be undone.')) {
+        return;
+      }
+      tileMap = createEmptyMap(MAP_TILES_W, MAP_TILES_H);
+      mobPlacements = [];
+      redraw();
+    });
+
+    // ===================================
+    // EXPORT MAP AS C ARRAY (TILE IDs)
+    // ===================================
+    const exportBtn = document.getElementById('exportMapBtn');
+    const exportText = document.getElementById('exportText');
+    const mapNameInput = document.getElementById('mapName');
+
+    exportBtn.addEventListener('click', () => {
+      const name = (mapNameInput.value || "Map_Build").trim();
+      let lines = [];
+
+      lines.push("// Tile map: " + MAP_TILES_H + " rows × " + MAP_TILES_W + " cols");
+      lines.push("// Tile ID mapping (keep this in sync with your C enum):");
+      allTiles.forEach(tile => {
+        lines.push("// " + tile.id + " = " + tile.category + " :: " + tile.name);
+      });
+      lines.push("");
+      lines.push("static const uint8_t " + name + "[" + MAP_TILES_H + "][" + MAP_TILES_W + "] PROGMEM = {");
+
+      for (let y = 0; y < MAP_TILES_H; y++) {
+        const row = tileMap[y].join(", ");
+        lines.push("  { " + row + " }" + (y < MAP_TILES_H - 1 ? "," : ""));
+      }
+      lines.push("};");
+
+      // Export overlay mob layer as a separate 2D array.
+      // This keeps tunnels/tiles intact while allowing render-only mobs.
+      const mobLayer = createEmptyMap(MAP_TILES_W, MAP_TILES_H);
+      mobPlacements.forEach(m => {
+        if (m.x < 0 || m.x >= MAP_TILES_W || m.y < 0 || m.y >= MAP_TILES_H) return;
+        mobLayer[m.y][m.x] = m.id;
+      });
+
+      // Debug: find Mario spawn marker coordinate (if present)
+      let marioSpawn = null;
+      for (let y = 0; y < MAP_TILES_H; y++) {
+        for (let x = 0; x < MAP_TILES_W; x++) {
+          if (mobLayer[y][x] === TILE_ID_MOB_MARIO_SPAWN) {
+            marioSpawn = { x, y };
+            break;
+          }
+        }
+        if (marioSpawn) break;
+      }
+      lines.push("// DEBUG: Mario Spawn = " + (marioSpawn ? (`(${marioSpawn.x},${marioSpawn.y})`) : "NONE"));
+
+      lines.push("");
+      lines.push("// Mob overlay layer: " + MAP_TILES_H + " rows × " + MAP_TILES_W + " cols");
+      lines.push("// 0 = none, otherwise MOB_* IDs (bottom-anchored render-only)");
+      lines.push("static const uint8_t Map_Mobs[" + MAP_TILES_H + "][" + MAP_TILES_W + "] PROGMEM = {");
+      for (let y = 0; y < MAP_TILES_H; y++) {
+        const row = mobLayer[y].join(", ");
+        lines.push("  { " + row + " }" + (y < MAP_TILES_H - 1 ? "," : ""));
+      }
+      lines.push("};");
+
+      exportText.value = lines.join("\n");
+    });
+
+    // ===================================
+    // IMPORT MAP FROM C ARRAY
+    // ===================================
+    const importMapText = document.getElementById('importMapText');
+    const importMapBtn = document.getElementById('importMapBtn');
+
+    importMapBtn.addEventListener('click', () => {
+      const text = importMapText.value.trim();
+      if (!text) {
+        alert("Paste a C tile map array first.");
+        return;
+      }
+
+      // If the import includes an overlay mob layer, parse it too.
+      // We'll APPLY it after we compute the map's yOffset so mobs stay aligned.
+      const mobsIdx = text.indexOf('Map_Mobs');
+      let importedMobs = null; // { rows, cols, nums }
+      if (mobsIdx !== -1) {
+        const mobsText = text.slice(mobsIdx);
+        const dimMatchM = mobsText.match(/\[(\d+)\]\s*\[(\d+)\]/);
+        let rowsM = MAP_TILES_H;
+        let colsM = MAP_TILES_W;
+        if (dimMatchM) {
+          rowsM = parseInt(dimMatchM[1], 10) || rowsM;
+          colsM = parseInt(dimMatchM[2], 10) || colsM;
+        }
+
+        const firstBraceM = mobsText.indexOf('{');
+        const lastBraceM  = mobsText.lastIndexOf('}');
+        if (firstBraceM !== -1 && lastBraceM !== -1 && lastBraceM > firstBraceM) {
+          const bodyM = mobsText.slice(firstBraceM, lastBraceM + 1);
+          const numsM = (bodyM.match(/-?\d+/g) || []).map(n => parseInt(n, 10));
+          const neededM = rowsM * colsM;
+          if (numsM.length >= neededM) {
+            importedMobs = { rows: rowsM, cols: colsM, nums: numsM };
+          }
+        }
+      }
+
+      // 1) Get dimensions from [rows][cols]
+      const dimMatch = text.match(/\[(\d+)\]\s*\[(\d+)\]/);
+      let rows = MAP_TILES_H;
+      let cols = MAP_TILES_W;
+      if (dimMatch) {
+        rows = parseInt(dimMatch[1], 10) || rows;
+        cols = parseInt(dimMatch[2], 10) || cols;
+      }
+
+      // 2) Restrict parsing to the body of the array (between first '{' and last '}')
+      const firstBrace = text.indexOf('{');
+      const lastBrace  = text.lastIndexOf('}');
+      if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+        alert("Could not find array braces in the import text.");
+        return;
+      }
+      const body = text.slice(firstBrace, lastBrace + 1);
+
+      // 3) Extract integers ONLY from the body
+      const nums = (body.match(/-?\d+/g) || []).map(n => parseInt(n, 10));
+
+      const needed = rows * cols;
+      if (nums.length < needed) {
+        alert("Not enough numbers for " + rows + "x" + cols +
+              " map. Found " + nums.length + ", need " + needed + ".");
+        return;
+      }
+
+      // 4) Verify dimensions match expected 240×32
+      if (rows !== MAP_TILES_H || cols !== MAP_TILES_W) {
+        const proceed = confirm(
+          "Imported map is " + rows + "×" + cols +
+          " but editor expects " + MAP_TILES_H + "×" + MAP_TILES_W +
+          ". Import anyway (will truncate/pad to editor size)?"
+        );
+        if (!proceed) return;
+      }
+
+      // 5) Fill tileMap with bottom-aligned import.
+      // If imported rows < 32: yOffset = 32 - rows (add empty rows ABOVE).
+      // If imported rows > 32: keep only the bottom 32 rows (drop extra from top).
+      const rowsToCopy = Math.min(rows, MAP_TILES_H);
+      const colsToCopy = Math.min(cols, MAP_TILES_W);
+      const srcStartY = Math.max(0, rows - MAP_TILES_H);
+      const yOffset = MAP_TILES_H - rowsToCopy;
+
+      tileMap = createEmptyMap(MAP_TILES_W, MAP_TILES_H);
+      for (let y = 0; y < rowsToCopy; y++) {
+        for (let x = 0; x < colsToCopy; x++) {
+          const srcIndex = (srcStartY + y) * cols + x;
+          tileMap[yOffset + y][x] = (srcIndex >= 0 && srcIndex < nums.length) ? nums[srcIndex] : 0;
+        }
+      }
+
+      // Apply mob overlay import with the SAME bottom-align shift.
+      if (importedMobs) {
+        const rowsM = importedMobs.rows;
+        const colsM = importedMobs.cols;
+        const numsM = importedMobs.nums;
+
+        const rowsToCopyM = Math.min(rowsM, MAP_TILES_H);
+        const colsToCopyM = Math.min(colsM, MAP_TILES_W);
+        const srcStartYM = Math.max(0, rowsM - MAP_TILES_H);
+        const yOffsetM = MAP_TILES_H - rowsToCopyM;
+
+        mobPlacements = [];
+        for (let y = 0; y < rowsToCopyM; y++) {
+          for (let x = 0; x < colsToCopyM; x++) {
+            const srcIndexM = (srcStartYM + y) * colsM + x;
+            const v = (srcIndexM >= 0 && srcIndexM < numsM.length) ? numsM[srcIndexM] : 0;
+            if (v && v !== 0) mobPlacements.push({ id: v, x, y: yOffsetM + y });
+          }
+        }
+      } else {
+        // No mob layer in import; clear overlay.
+        mobPlacements = [];
+      }
+
+      // 6) Reset scroll + redraw
+      viewOffsetX = 0;
+      viewOffsetY = Math.max(0, MAP_TILES_H - VIEW_TILES_H);
+      updateScrollMax();
+      redraw();
+
+      alert("Map imported successfully! Loaded " +
+            Math.min(rows, MAP_TILES_H) + "×" +
+            Math.min(cols, MAP_TILES_W) + " tiles.");
+    });
+
+    // ===================================
+    // DEFAULT GROUND TILE SET (if you don't want to paste yet)
+    // ===================================
+    function loadDefaultGroundTiles() {
+      allTiles = [];
+      allTiles.push(makeEmptyTile()); // 0 - TILE_ID_EMPTY
+
+      function inferPaletteTab(id, name, category) {
+        if (/^Under_Ground_/i.test(name)) return "Underground";
+        if (/Tunnel|Pipe/i.test(name) || [
+          TILE_ID_GREEN_TUNNEL_LEFT,
+          TILE_ID_GREEN_TUNNEL_1_2,
+          TILE_ID_GREEN_TUNNEL_DOWN_2_2,
+          TILE_ID_GREEN_TUNNEL_LEFT_2_4,
+          TILE_ID_GREEN_TUNNEL_4_4,
+          19, 22, 44
+        ].includes(id)) return "Pipes & Tunnels";
+        if ([TILE_ID_CHECK_POINT, TILE_ID_CHECKED_POINT].includes(id)) return "Checkpoints";
+        if (/Flag|Castle|Finish/i.test(name) || [50, 51, 52, 56].includes(id)) return "Goals";
+        if (/Lava|Hazard/i.test(name) || [58].includes(id)) return "Hazards";
+        if (/BG |Bush|Cloud/i.test(name) || [20, 53, 54].includes(id)) return "Decor";
+        if (category === CATEGORY_BRICK) return "Blocks";
+        if (category === CATEGORY_ITEM) return "Items";
+        if (category === CATEGORY_MOB) {
+          if (id === TILE_ID_MOB_MARIO_SPAWN) return "Markers";
+          return "Enemies";
+        }
+        if (/Slope|Cliff|Wall|Fill|Top_Left|Top_Right|Side/i.test(name)) return "Slopes & Cliffs";
+        return "Ground";
+      }
+
+      function addTile(id, name, data, widthOrOpts = 8, height = 8, category = CATEGORY_TERRAIN, opts = {}) {
+        let width = 8;
+        let localOpts = opts;
+
+        // Overload: addTile(id, name, data, { ...opts })
+        if (typeof widthOrOpts === 'object' && widthOrOpts !== null && !Array.isArray(widthOrOpts)) {
+          localOpts = widthOrOpts;
+          width = 8;
+          height = 8;
+          category = CATEGORY_TERRAIN;
+        } else {
+          width = widthOrOpts;
+        }
+
+        // Default behavior: mobs are overlay placements (stored in mobPlacements),
+        // unless explicitly overridden.
+        if (category === CATEGORY_MOB && localOpts.isOverlayMob === undefined) {
+          localOpts = { ...localOpts, isOverlayMob: true };
+        }
+
+        const paletteTab = localOpts.paletteTab || inferPaletteTab(id, name, category);
+        const displayName = localOpts.displayName;
+
+        allTiles.push({
+          id: id,
+          name,
+          displayName,
+          category: category,
+          paletteTab,
+          data,
+          w: width,
+          h: height,
+          ...localOpts
+        });
+      }
+
+      // TILE_ID 1: Ground_Tile_Array (main grass + dirt)
+      addTile(1, "Ground_Tile_Array", [
+        [8, 8, 8, 8, 8, 8, 8, 8],
+        [8, 3, 8, 8, 3, 3, 8, 8],
+        [3, 3, 3, 3, 3, 3, 3, 8],
+        [3, 3, 5, 3, 3, 3, 5, 3],
+        [3, 7, 3, 3, 5, 3, 3, 7],
+        [3, 3, 3, 5, 3, 3, 3, 3],
+        [3, 5, 3, 3, 3, 7, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Ground", displayName: "Ground" });
+
+      // TILE_ID 2: Ground_Tile_Top_Left (cliff corner)
+      addTile(2, "Ground_Tile_Top_Left", [
+        [0, 8, 8, 8, 8, 8, 8, 8],
+        [8, 8, 8, 8, 8, 8, 8, 8],
+        [8, 8, 3, 3, 3, 3, 3, 3],
+        [7, 3, 3, 5, 3, 3, 3, 5],
+        [7, 3, 7, 3, 3, 5, 3, 7],
+        [7, 3, 3, 3, 5, 3, 3, 3],
+        [7, 3, 5, 3, 3, 3, 7, 3],
+        [7, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Top Corner (L)" });
+
+      // TILE_ID 3: Ground_Tile_Top_Right (cliff corner)
+      addTile(3, "Ground_Tile_Top_Right", [
+        [8, 8, 8, 8, 8, 8, 8, 0],
+        [8, 8, 8, 8, 8, 8, 8, 8],
+        [3, 3, 3, 3, 3, 3, 8, 8],
+        [3, 3, 3, 5, 3, 3, 3, 7],
+        [3, 3, 7, 3, 3, 5, 3, 7],
+        [3, 3, 3, 3, 5, 3, 3, 7],
+        [3, 3, 5, 3, 3, 3, 3, 7],
+        [3, 3, 3, 3, 3, 3, 3, 7]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Top Corner (R)" });
+
+      // TILE_ID 4: Ground_Tile_Wall_Left (left vertical wall)
+      addTile(4, "Ground_Tile_Wall_Left", [
+        [7, 3, 3, 3, 3, 3, 3, 3],
+        [7, 3, 3, 3, 3, 3, 3, 3],
+        [7, 3, 3, 3, 3, 3, 3, 3],
+        [7, 3, 5, 3, 3, 3, 5, 3],
+        [7, 7, 3, 3, 5, 3, 3, 7],
+        [7, 3, 3, 5, 3, 3, 3, 3],
+        [7, 5, 3, 3, 3, 7, 3, 3],
+        [7, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Wall (L)" });
+
+      // TILE_ID 5: Ground_Tile_Wall_Right (right vertical wall)
+      addTile(5, "Ground_Tile_Wall_Right", [
+        [3, 3, 3, 3, 3, 3, 3, 7],
+        [3, 3, 3, 3, 3, 3, 3, 7],
+        [3, 3, 3, 3, 3, 3, 3, 7],
+        [3, 3, 5, 3, 3, 3, 5, 7],
+        [3, 7, 3, 3, 5, 3, 7, 7],
+        [3, 3, 3, 5, 3, 3, 3, 7],
+        [3, 5, 3, 3, 3, 7, 3, 7],
+        [3, 3, 3, 3, 3, 3, 3, 7]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Wall (R)" });
+
+      // TILE_ID 6: Ground_Tile_Center_Dirt (underground dirt fill)
+      addTile(6, "Ground_Tile_Center_Dirt", [
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 5, 3, 3, 3, 5, 3],
+        [3, 7, 3, 3, 5, 3, 3, 7],
+        [3, 3, 3, 5, 3, 3, 3, 3],
+        [3, 5, 3, 3, 3, 7, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Ground", displayName: "Dirt" });
+
+      // TILE_ID 7: Ground_Tile_Slope_Up_Right (slope ascending right)
+      addTile(7, "Ground_Tile_Slope_Up_Right", [
+        [8, 0, 0, 0, 0, 0, 0, 0],
+        [8, 8, 0, 0, 0, 0, 0, 0],
+        [3, 8, 8, 0, 0, 0, 0, 0],
+        [3, 3, 8, 8, 0, 0, 0, 0],
+        [7, 3, 3, 8, 8, 0, 0, 0],
+        [3, 5, 3, 3, 8, 8, 0, 0],
+        [3, 3, 3, 5, 3, 8, 8, 0],
+        [3, 3, 5, 3, 3, 7, 8, 8]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Slope Up (R)" });
+
+      // TILE_ID 8: Ground_Tile_Slope_Up_Left (slope ascending left)
+      addTile(8, "Ground_Tile_Slope_Up_Left", [
+        [0, 0, 0, 0, 0, 0, 0, 8],
+        [0, 0, 0, 0, 0, 0, 8, 8],
+        [0, 0, 0, 0, 0, 8, 8, 3],
+        [0, 0, 0, 0, 8, 8, 3, 7],
+        [0, 0, 0, 8, 8, 3, 3, 3],
+        [0, 0, 8, 8, 3, 3, 5, 3],
+        [0, 8, 8, 3, 5, 3, 3, 3],
+        [8, 8, 7, 3, 3, 5, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Slope Up (L)" });
+
+      // TILE_ID 9: Ground_Tile_Grass_Side_Left
+      addTile(9, "Ground_Tile_Grass_Side_Left", [
+        [0, 8, 8, 8, 8, 8, 8, 8],
+        [8, 8, 3, 3, 8, 8, 8, 8],
+        [8, 8, 3, 3, 3, 3, 3, 3],
+        [8, 8, 3, 3, 5, 3, 3, 5],
+        [8, 3, 3, 3, 3, 5, 3, 7],
+        [8, 3, 3, 3, 5, 3, 3, 3],
+        [8, 3, 3, 3, 3, 3, 7, 3],
+        [8, 8, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass Edge (L)" });
+
+      // TILE_ID 10: Ground_Tile_Grass_Side_Right
+      addTile(10, "Ground_Tile_Grass_Side_Right", [
+        [8, 8, 8, 8, 8, 8, 8, 0],
+        [8, 8, 8, 3, 3, 3, 8, 8],
+        [3, 3, 3, 3, 3, 3, 8, 8],
+        [5, 3, 3, 5, 3, 3, 8, 8],
+        [7, 3, 5, 3, 3, 3, 3, 8],
+        [3, 3, 3, 5, 3, 3, 3, 8],
+        [3, 7, 3, 3, 3, 3, 3, 8],
+        [3, 3, 3, 3, 3, 3, 8, 8]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass Edge (R)" });
+
+      // TILE_ID 11: Ground_Tile_Fill_Left
+      addTile(11, "Ground_Tile_Fill_Left", [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [8, 0, 0, 0, 0, 0, 0, 0]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Fill (L)" });
+
+      // TILE_ID 12: Ground_Tile_Fill_Right
+      addTile(12, "Ground_Tile_Fill_Right", [
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 8]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Fill (R)" });
+
+      // TILE_ID 13: Ground_Tile_Grass_Dirt_Fill_Left
+      addTile(13, "Ground_Tile_Grass_Dirt_Fill_Left", [
+        [8, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 5, 3, 3, 3, 5],
+        [3, 3, 7, 3, 3, 5, 3, 3],
+        [7, 3, 3, 3, 5, 3, 3, 3],
+        [3, 3, 5, 3, 3, 3, 7, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass/Dirt Fill (L)" });
+
+      // TILE_ID 14: Ground_Tile_Grass_Dirt_Fill_Right
+      addTile(14, "Ground_Tile_Grass_Dirt_Fill_Right", [
+        [3, 3, 3, 3, 3, 3, 3, 8],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 3, 3, 5, 3, 3, 3, 5],
+        [3, 3, 7, 3, 3, 5, 3, 3],
+        [7, 3, 3, 3, 5, 3, 3, 3],
+        [3, 3, 5, 3, 3, 3, 7, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass/Dirt Fill (R)" });
+
+      // TILE_ID 15: Ground_Tile_Grass_Stright_Side_Right
+      addTile(15, "Ground_Tile_Grass_Straight_Side_Right", [
+        [3, 3, 3, 3, 3, 3, 3, 8],
+        [3, 3, 3, 5, 3, 3, 8, 8],
+        [3, 3, 3, 3, 3, 3, 8, 8],
+        [3, 3, 5, 3, 3, 3, 7, 8],
+        [3, 7, 3, 3, 5, 3, 3, 8],
+        [3, 3, 3, 5, 3, 3, 3, 8],
+        [3, 5, 3, 3, 3, 3, 8, 8],
+        [3, 3, 3, 3, 3, 8, 8, 8]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass Straight (R)" });
+
+      // TILE_ID 16: Ground_Tile_Grass_Stright_Side_Left
+      addTile(16, "Ground_Tile_Grass_Straight_Side_Left", [
+        [8, 3, 3, 3, 3, 3, 3, 3],
+        [8, 8, 3, 5, 3, 3, 3, 3],
+        [8, 8, 3, 3, 3, 3, 5, 3],
+        [8, 3, 5, 3, 3, 3, 3, 3],
+        [8, 7, 3, 3, 5, 3, 3, 3],
+        [8, 3, 3, 5, 3, 3, 3, 3],
+        [8, 8, 3, 3, 3, 3, 3, 3],
+        [8, 8, 8, 7, 3, 3, 3, 3]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Grass Straight (L)" });
+
+      // TILE_ID 17: Ground_Tile_Vert_Cliff_Left
+      addTile(17, "Ground_Tile_Vert_Cliff_Left", [
+        [7, 3, 3, 3, 3, 3, 3, 3],
+        [0, 7, 3, 3, 3, 3, 5, 3],
+        [0, 0, 7, 3, 3, 5, 3, 3],
+        [0, 0, 0, 7, 3, 3, 5, 3],
+        [0, 0, 0, 0, 7, 3, 3, 3],
+        [0, 0, 0, 0, 0, 7, 3, 3],
+        [0, 0, 0, 0, 0, 0, 7, 3],
+        [0, 0, 0, 0, 0, 0, 0, 7]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Cliff Diagonal (L)" });
+
+      // TILE_ID 18: Ground_Tile_Vert_Cliff_Right
+      addTile(18, "Ground_Tile_Vert_Cliff_Right", [
+        [7, 0, 0, 0, 0, 0, 0, 0],
+        [3, 7, 0, 0, 0, 0, 0, 0],
+        [3, 3, 7, 0, 0, 0, 0, 0],
+        [3, 3, 3, 7, 0, 0, 0, 0],
+        [3, 5, 3, 3, 7, 0, 0, 0],
+        [3, 3, 3, 3, 3, 7, 0, 0],
+        [3, 5, 3, 5, 3, 3, 7, 0],
+        [3, 3, 3, 3, 3, 3, 3, 7]
+      ], { paletteTab: "Slopes & Cliffs", displayName: "Cliff Diagonal (R)" });
+
+      // TILE_ID 21: SemiGround_Tile_Array
+      addTile(21, "SemiGround_Tile_Array", [
+        [8, 8, 8, 8, 8, 8, 8, 8],
+        [8, 3, 8, 8, 3, 3, 8, 8],
+        [3, 3, 3, 3, 3, 3, 3, 8],
+        [3, 3, 5, 3, 3, 3, 5, 3],
+        [3, 7, 3, 3, 5, 3, 3, 7],
+        [3, 3, 3, 5, 3, 3, 3, 3],
+        [3, 5, 3, 3, 3, 7, 3, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], { paletteTab: "Ground", displayName: "Platform" });
+
+      // TILE_ID 19: Ground_Tile_Green_Tunnel (17×18)
+      addTile(19, "Ground_Tile_Green_Tunnel", [
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe" });
+
+      // TILE_ID 44: Ground_Tile_Green_NoTel_Tunnel (17×18) - no teleport
+      addTile(44, "Ground_Tile_Green_NoTel_Tunnel", [
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe (No Teleport)" });
+
+      // TILE_ID 32: Green Tunnel (Left Entrance) (17×18)
+      addTile(TILE_ID_GREEN_TUNNEL_LEFT, "Green Tunnel (Left Entrance)", [
+        [19, 19, 19, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [19, 23, 23, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [19, 18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [6,  23, 23, 19, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  19],
+        [6,  6,  6,  19, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  19],
+        [6,  6,  6,  19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 18, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 23, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [19, 19, 19, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ], 17, 18, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe Left (Entrance)" });
+
+      // TILE_ID 41: Ground_Tile_Green_Tunnel_1_2 (18×17) - named upright entry
+      // Identical art to TILE_ID 19
+      addTile(TILE_ID_GREEN_TUNNEL_1_2, "Ground_Tile_Green_Tunnel_1_2", [
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe (1×2)" });
+
+      // TILE_ID 59: Ground_Tile_Green_Tunnel_Down_2_2 (18×17) - named down/exit
+      // Identical art to TILE_ID 22
+      addTile(TILE_ID_GREEN_TUNNEL_DOWN_2_2, "Ground_Tile_Green_Tunnel_Down_2_2", [
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe Down (2×2)" });
+
+      // TILE_ID 60: Ground_Tile_Green_Tunnel_Left_3_4 (17×18) - named left entrance
+      // Identical art to TILE_ID 32
+      addTile(TILE_ID_GREEN_TUNNEL_LEFT_2_4, "Ground_Tile_Green_Tunnel_Left_3_4", [
+        [19, 19, 19, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [19, 23, 23, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 23, 23, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [19, 18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [6,  23, 23, 19, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  19],
+        [6,  6,  6,  19, 6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  19],
+        [6,  6,  6,  19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [6,  18, 18, 19, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 19],
+        [19, 18, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 23, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [19, 19, 19, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      ], 17, 18, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe Left (3×4)" });
+
+      // TILE_ID 61: Ground_Tile_Green_Tunnel_4_4 (18×17) - named upright exit
+      // Identical art to TILE_ID 19
+      addTile(TILE_ID_GREEN_TUNNEL_4_4, "Ground_Tile_Green_Tunnel_4_4", [
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe (4×4)" });
+
+      // TILE_ID 20: Ground_Tile_Bush (8×25)
+      addTile(20, "Ground_Tile_Bush", [
+        [0, 19, 18, 18, 18, 19, 0, 0, 19, 18, 18, 19, 0, 0, 19, 18, 18, 19, 0, 0, 19, 18, 18, 19, 0],
+        [19, 18, 18, 23, 18, 18, 19, 19, 18, 18, 23, 18, 19, 19, 18, 23, 18, 18, 19, 19, 18, 18, 23, 18, 19],
+        [19, 18, 23, 18, 6, 23, 18, 18, 18, 23, 18, 18, 18, 18, 23, 6, 18, 23, 18, 18, 18, 23, 18, 18, 19],
+        [19, 18, 18, 23, 18, 18, 18, 18, 23, 18, 18, 18, 18, 23, 18, 18, 18, 18, 23, 18, 18, 18, 23, 18, 19],
+        [19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [19, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19],
+        [0, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 0],
+        [0, 0, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 0, 0]
+      ], 25, 8, CATEGORY_TERRAIN, { paletteTab: "Decor", displayName: "Bush" });
+
+      // TILE_ID 58: Ground_Tile_Lava_1 (8×8) - editor only uses frame 1
+      addTile(58, "Ground_Tile_Lava_1", [
+        [0,5,6,5,6,5,6,0],
+        [5,6,5,6,5,6,5,6],
+        [2,5,2,5,2,5,2,5],
+        [2,2,5,2,2,5,2,2],
+        [2,2,2,5,2,2,2,2],
+        [2,2,2,2,2,2,2,2],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Hazards", displayName: "Lava" });
+
+      addTile(53, "BG Cloud Puff (A)", [
+        [0, 0, 6, 6, 0, 0, 0],
+        [0, 6, 6, 6, 6, 6, 0],
+        [6, 6, 6, 6, 6, 6, 6],
+        [6, 6, 6, 6, 6, 6, 6],
+        [0, 6, 10, 10, 10, 6, 0]
+      ], 7, 5, CATEGORY_TERRAIN, { paletteTab: "Decor", displayName: "Cloud Puff" });
+
+      addTile(54, "BG Cloud Long (A)", [
+        [0, 0, 6, 6, 0, 0, 6, 6, 0, 0, 6, 6, 0, 0],
+        [0, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 0],
+        [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+        [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+        [0, 6, 10, 10, 10, 6, 10, 10, 6, 10, 10, 6, 10, 6]
+      ], 14, 5, CATEGORY_TERRAIN, { paletteTab: "Decor", displayName: "Cloud Long" });
+
+      // TILE_ID 56: Mario Castle (Finish) (40×40) - decoration only
+      addTile(56, "Mario Castle (Finish)", [
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 0, 0, 3, 3, 3, 0, 0, 3, 3, 3, 3, 0, 0, 3, 3, 3, 0, 0, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 3, 0, 0, 3, 15, 3, 0, 0, 3, 15, 15, 3, 0, 0, 3, 15, 3, 0, 0, 3, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 3, 3, 3, 3, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 3, 3, 3, 3, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 14, 14, 15, 15, 15, 15, 14, 14, 15, 15, 15, 15, 14, 14, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 6, 14, 15, 15, 14, 14, 6, 14, 15, 15, 14, 14, 6, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 6, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 14, 14, 14, 14, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 3, 3, 3, 3, 0, 0, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 0, 0, 3, 3, 3, 3 ],
+        [ 3, 15, 15, 3, 0, 0, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 15, 15, 3, 0, 0, 3, 15, 15, 3 ],
+        [ 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3, 3, 3, 3, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 14, 15, 15, 15, 15, 14, 14, 15, 15, 15, 14, 14, 15, 15, 15, 14, 14, 15, 15, 14, 14, 15, 15, 15, 14, 14, 15, 15, 15, 14, 14, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 14, 13, 14, 15, 15, 14, 14, 15, 15, 14, 13, 14, 15, 15, 14, 13, 14, 15, 15, 14, 13, 14, 15, 15, 14, 14, 15, 15, 14, 13, 14, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 14, 14, 14, 15, 15, 14, 14, 15, 15, 14, 14, 14, 15, 15, 14, 14, 15, 15, 15, 14, 14, 14, 15, 15, 14, 14, 15, 15, 14, 14, 14, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 3, 13, 13, 13, 13, 13, 13, 13, 13, 3, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 3, 13, 13, 14, 14, 14, 14, 14, 14, 13, 13, 3, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 3, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 3, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 13, 14, 14, 3, 3, 14, 14, 13, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 3, 3, 3, 3, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 3, 3, 3, 3, 3, 3, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 3, 3, 3, 3, 3, 3, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 3, 3, 3, 3, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 14, 3, 3, 14, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 13, 14, 14, 14, 14, 14, 14, 13, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 3, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 ]
+      ], 40, 40, CATEGORY_TERRAIN, { paletteTab: "Goals", displayName: "Castle (Finish)" });
+
+      // TILE_ID 22: Ground_Tile_Green_Tunnel_Down (17×18)
+      addTile(22, "Ground_Tile_Green_Tunnel_Down", [
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [0, 0, 19, 23, 18, 18, 6, 6, 23, 18, 18, 18, 23, 23, 23, 19, 0, 0],
+        [19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 23, 18, 18, 18, 6, 6, 23, 18, 18, 18, 18, 23, 23, 23, 23, 23, 19],
+        [19, 19, 19, 6, 6, 6, 6, 6, 6, 6, 19, 19, 19, 19, 19, 19, 19, 19]
+      ], 18, 17, CATEGORY_TERRAIN, { paletteTab: "Pipes & Tunnels", displayName: "Pipe Down" });
+
+      // New terrain: Stone Ledge (solid ground behavior)
+      addTile(31, "Ground_Tile_Stone_Ledge", [
+        [0, 7, 7, 7, 21, 7, 7, 0],
+        [6, 6, 7, 7, 7, 7, 7, 7],
+        [6, 6, 7, 7, 6, 6, 7, 7],
+        [6, 7, 7, 7, 6, 6, 7, 7],
+        [7, 7, 21, 7, 7, 7, 7, 7],
+        [7, 7, 7, 7, 7, 21, 7, 7],
+        [7, 7, 6, 6, 7, 21, 21, 7],
+        [0, 7, 7, 7, 7, 7, 7, 0]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Slopes & Cliffs", displayName: "Stone Ledge" });
+
+      // TILE_ID 33: Under_Ground_Tile_Roof_Array (underground roof)
+      addTile(33, "Under_Ground_Tile_Roof_Array", [
+        [16, 16, 16, 16, 16, 16, 16, 16],
+        [16, 17, 16, 16, 16, 17, 17, 16],
+        [16, 16, 16, 16, 16, 16, 16, 16],
+        [16, 16, 17, 16, 16, 16, 16, 16],
+        [16, 16, 16, 16, 16, 16, 7, 16],
+        [16, 16, 16, 7, 7, 16, 16, 16],
+        [16, 7, 7, 16, 16, 16, 16, 7],
+        [7, 7, 7, 7, 7, 7, 7, 7]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Roof" });
+
+      // TILE_ID 37: Under_Ground_Tile_Roof_Fill_Left (underground roof fill - left)
+      addTile(37, "Under_Ground_Tile_Roof_Fill_Left", [
+        [16,16,16,16,16,17,16,16],
+        [17,16,16,16,16,17,16,16],
+        [16,17,16,16,16,16,16,16],
+        [16,16,16,16,17,16,16,17],
+        [16,16,16,16,16,16,16,16],
+        [17,16,16,17,16,16,16,16],
+        [16,16,16,16,16,17,16,16],
+        [7,16,16,16,17,17,16,16]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Roof Fill (L)" });
+
+      // TILE_ID 38: Under_Ground_Tile_Roof_Fill_Right (underground roof fill - right)
+      addTile(38, "Under_Ground_Tile_Roof_Fill_Right", [
+        [16,16,16,16,16,17,16,16],
+        [17,16,16,16,16,17,16,16],
+        [16,17,16,16,16,16,16,16],
+        [16,16,16,16,17,16,16,17],
+        [16,16,16,16,16,16,16,16],
+        [17,16,16,17,16,16,16,16],
+        [16,16,16,16,16,17,16,16],
+        [16,16,16,16,17,17,16,7]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Roof Fill (R)" });
+
+      // TILE_ID 34: Under_Ground_Tile_Wall_Right (underground right wall)
+      addTile(34, "Under_Ground_Tile_Wall_Right", [
+        [16, 16, 16, 16, 16, 16, 16, 7],
+        [16, 17, 16, 16, 16, 17, 7, 7],
+        [16, 16, 17, 16, 16, 16, 7, 7],
+        [16, 16, 17, 17, 16, 16, 16, 7],
+        [16, 16, 16, 16, 16, 16, 7, 7],
+        [16, 16, 17, 16, 16, 7, 7, 7],
+        [16, 17, 16, 16, 16, 16, 16, 7],
+        [16, 16, 16, 16, 17, 16, 7, 7]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Wall (R)" });
+
+      // TILE_ID 35: Under_Ground_Tile_Ground (underground ground/floor)
+      addTile(35, "Under_Ground_Tile_Ground", [
+        [7,7,7,7,7,7,7,7],
+        [16,7,7,16,16,16,16,7],
+        [16,16,16,7,7,16,16,16],
+        [16,16,16,16,16,16,16,16],
+        [16,16,17,16,16,16,16,16],
+        [16,16,16,16,16,16,16,16],
+        [16,17,16,16,16,17,17,16],
+        [16,16,16,16,16,16,16,16]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Ground" });
+
+      // TILE_ID 36: Under_Ground_Tile_Wall_Left (underground left wall)
+      addTile(36, "Under_Ground_Tile_Wall_Left", [
+        [7,16,16,16,16,16,16,16],
+        [7,7,17,16,16,16,16,16],
+        [7,7,16,16,17,16,16,16],
+        [7,16,16,16,17,17,16,16],
+        [7,7,16,16,16,16,16,16],
+        [7,16,17,16,16,17,16,16],
+        [7,17,16,16,16,16,17,16],
+        [7,7,16,16,17,16,16,16]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Wall (L)" });
+
+      // TILE_ID 39: Under_Ground_Tile_Ground_Fill_Right (underground ground fill - right)
+      addTile(39, "Under_Ground_Tile_Ground_Fill_Right", [
+        [16,16,16,16,16,17,16,7],
+        [17,16,16,16,16,17,16,16],
+        [16,17,16,16,16,16,16,16],
+        [16,16,16,16,17,16,16,17],
+        [16,16,16,16,16,16,16,16],
+        [17,16,16,17,16,16,16,16],
+        [16,16,16,16,16,17,16,16],
+        [16,16,16,16,17,17,16,16]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Ground Fill (R)" });
+
+      // TILE_ID 40: Under_Ground_Tile_Ground_Fill_Left (underground ground fill - left)
+      addTile(40, "Under_Ground_Tile_Ground_Fill_Left", [
+        [7,16,16,16,16,17,16,16],
+        [17,16,16,16,16,17,16,16],
+        [16,17,16,16,16,16,16,16],
+        [16,16,16,16,17,16,16,17],
+        [16,16,16,16,16,16,16,16],
+        [17,16,16,17,16,16,16,16],
+        [16,16,16,16,16,17,16,16],
+        [16,16,16,16,17,17,16,16]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Underground", displayName: "Ground Fill (L)" });
+
+      // =====================================================
+      // Checkpoint Flags (15x23) - Decoration tiles for now
+      // =====================================================
+
+      // TILE_ID 48: Ground_Tile_Check_Point (gray flag / unchecked)
+      addTile(TILE_ID_CHECK_POINT, "Ground_Tile_Check_Point", [
+        [ 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 21, 21, 21, 21, 21, 21, 21, 21, 21, 0, 0 ],
+        [ 0, 0, 13, 13, 21, 21, 7, 7, 7, 7, 7, 21, 21, 21, 0 ],
+        [ 0, 0, 13, 13, 21, 7, 20, 7, 7, 7, 20, 7, 21, 21, 21 ],
+        [ 0, 0, 13, 13, 21, 7, 20, 7, 7, 7, 20, 7, 21, 21, 0 ],
+        [ 0, 0, 13, 13, 21, 7, 20, 7, 20, 7, 20, 7, 21, 0, 0 ],
+        [ 0, 0, 13, 13, 21, 7, 20, 20, 7, 20, 20, 7, 21, 21, 0 ],
+        [ 0, 0, 13, 13, 21, 7, 20, 7, 7, 7, 20, 7, 21, 21, 21 ],
+        [ 0, 0, 13, 13, 21, 21, 7, 7, 7, 7, 7, 21, 21, 21, 0 ],
+        [ 0, 0, 13, 13, 21, 21, 21, 21, 21, 21, 21, 21, 21, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 7, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+      ], 15, 23, CATEGORY_TERRAIN, { paletteTab: "Checkpoints", displayName: "Checkpoint", anchor: "bottom" });
+
+      // TILE_ID 49: Ground_Tile_Checked_Point (red flag / checked)
+      addTile(TILE_ID_CHECKED_POINT, "Ground_Tile_Checked_Point", [
+        [ 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0 ],
+        [ 0, 0, 13, 13, 2, 2, 6, 6, 6, 6, 6, 2, 2, 2, 0 ],
+        [ 0, 0, 13, 13, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 2 ],
+        [ 0, 0, 13, 13, 2, 6, 2, 2, 6, 2, 2, 6, 2, 2, 0 ],
+        [ 0, 0, 13, 13, 2, 6, 2, 6, 2, 6, 2, 6, 2, 0, 0 ],
+        [ 0, 0, 13, 13, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 0 ],
+        [ 0, 0, 13, 13, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 2 ],
+        [ 0, 0, 13, 13, 2, 2, 6, 6, 6, 6, 6, 2, 2, 2, 0 ],
+        [ 0, 0, 13, 13, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 13, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 7, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+      ], 15, 23, CATEGORY_TERRAIN, { paletteTab: "Checkpoints", displayName: "Checkpoint (Checked)", anchor: "bottom" });
+
+      // =====================================================
+      // Flag Pole (Split - Visual Only)
+      // =====================================================
+
+      // TILE_ID 50: Flag Top (14x15)
+      addTile(50, "Ground_Tile_Flag", [
+        [ 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 6, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0 ],
+        [ 0, 6, 6, 2, 2, 6, 6, 6, 6, 6, 2, 2, 2, 0 ],
+        [ 0, 6, 6, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 2 ],
+        [ 0, 6, 6, 2, 6, 2, 2, 6, 2, 2, 6, 2, 2, 0 ],
+        [ 0, 6, 6, 2, 6, 2, 6, 2, 6, 2, 6, 2, 0, 0 ],
+        [ 0, 6, 6, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 0 ],
+        [ 0, 6, 6, 2, 6, 2, 6, 6, 6, 2, 6, 2, 2, 2 ],
+        [ 0, 6, 6, 2, 2, 6, 6, 6, 6, 6, 2, 2, 2, 0 ],
+        [ 0, 6, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0 ]
+      ], 14, 15, CATEGORY_TERRAIN, { paletteTab: "Goals", displayName: "Goal Flag" });
+
+      // TILE_ID 51: Pole Segment (2x8)
+      addTile(51, "Ground_Tile_Flag_Pole", [
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ],
+        [ 6, 6 ]
+      ], 2, 8, CATEGORY_TERRAIN, { paletteTab: "Goals", displayName: "Flag Pole" });
+
+      // TILE_ID 52: Pole Base (8x8)
+      addTile(52, "Ground_Tile_Flag_Pole_Base", [
+        [ 3, 3, 3, 6, 6, 3, 3, 3 ],
+        [ 3, 15, 3, 6, 6, 3, 15, 3 ],
+        [ 3, 15, 3, 3, 3, 3, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 15, 15, 15, 15, 15, 15, 3 ],
+        [ 3, 3, 3, 3, 3, 3, 3, 3 ]
+      ], 8, 8, CATEGORY_TERRAIN, { paletteTab: "Goals", displayName: "Pole Base" });
+
+      // ═══════════════════════════════════════════════════════════
+      // BRICK TILES (Interactive Blocks)
+      // ═══════════════════════════════════════════════════════════
+
+      // TILE_ID 23: Tile_Brick_Question_Array (Question block with mushroom)
+      addTile(23, "Tile_Brick_Question_Array", [
+        [5, 5, 6, 6, 6, 6, 5, 5],
+        [5, 6, 6, 6, 6, 6, 6, 5],
+        [5, 6, 6, 13, 13, 6, 6, 5],
+        [5, 13, 13, 13, 13, 6, 6, 5],
+        [5, 13, 13, 6, 6, 6, 13, 5],
+        [5, 13, 13, 6, 6, 13, 13, 5],
+        [5, 13, 13, 13, 13, 13, 13, 5],
+        [5, 5, 5, 6, 6, 5, 5, 5]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Question Block" });
+
+      // TILE_ID 24: Tile_Brick_Solid_Array (Non-breaking solid block)
+      addTile(24, "Tile_Brick_Solid_Array", [
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 20, 15, 15, 15, 15, 20, 3],
+        [3, 15, 20, 15, 15, 20, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Brick (Solid)" });
+
+      // TILE_ID 25: Tile_Brick_Breakable_Array (Breakable brick)
+      addTile(25, "Tile_Brick_Breakable_Array", [
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 20, 15, 15, 15, 15, 20, 3],
+        [3, 15, 20, 15, 15, 20, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Brick (Breakable)" });
+
+      // TILE_ID 26: Tile_Brick_Used_Brick_Array (Used/empty block)
+      addTile(26, "Tile_Brick_Used_Brick_Array", [
+        [3, 3, 3, 3, 3, 3, 3, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 20, 15, 15, 15, 15, 20, 3],
+        [3, 15, 20, 15, 15, 20, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 15, 15, 15, 15, 15, 15, 3],
+        [3, 3, 3, 3, 3, 3, 3, 3]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Block (Used)" });
+
+      // TILE_ID 29: Tile_Brick_Coin_Array (Coin Brick - new, no logic yet)
+      addTile(29, "Tile_Brick_Coin_Array", [
+        [5, 5, 5, 5, 5, 5, 5, 5],
+        [5,13,13,13,13,13,13, 5],
+        [5,13,20,13,13,20,13, 5],
+        [5,13,20,13,13,20,13, 5],
+        [5,13,13,13,13,13,13, 5],
+        [5,13,13,13,13,13,13, 5],
+        [5,13,13,13,13,13,13, 5],
+        [5, 5, 5, 5, 5, 5, 5, 5]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Brick (Coin)" });
+
+      // TILE_ID 30: Tile_Brick_GreenMushroom_Array (render-only green 1UP-brick)
+      addTile(30, "Tile_Brick_GreenMushroom_Array", [
+        [5,5,5,5,5,5,5,5],
+        [5,13,13,13,13,13,13,5],
+        [5,13,20,13,13,20,13,5],
+        [5,13,20,13,13,20,13,5],
+        [5,13,13,13,13,13,13,5],
+        [5,13,13,13,13,13,13,5],
+        [5,13,13,13,13,13,13,5],
+        [5,5,5,5,5,5,5,5]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Brick (1UP)" });
+
+      // TILE_ID 55: Tile_Brick_Cloud (Cloud Brick - Semi-Solid)
+      addTile(55, "Cloud Brick (Semi-Solid)", [
+        [ 0, 6, 6, 6, 6, 6, 6, 0 ],
+        [ 6, 6, 10, 6, 6, 10, 6, 6 ],
+        [ 6, 6, 10, 6, 6, 10, 6, 6 ],
+        [ 6, 6, 6, 6, 6, 6, 6, 6 ],
+        [ 6, 10, 6, 6, 6, 6, 10, 6 ],
+        [ 6, 6, 10, 10, 10, 10, 6, 6 ],
+        [ 0, 6, 6, 6, 6, 6, 6, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 0 ]
+      ], 8, 8, CATEGORY_BRICK, { paletteTab: "Blocks", displayName: "Cloud Brick" });
+
+      // ═══════════════════════════════════════════════════════════
+      // ITEM TILES (Collectibles)
+      // ═══════════════════════════════════════════════════════════
+
+      // TILE_ID 27: worldCoin (Collectible coin, 6×6 pixels)
+      addTile(27, "worldCoin", [
+        [0, 5, 5, 5, 5, 0],
+        [5, 5, 13, 13, 5, 5],
+        [5, 5, 13, 13, 5, 5],
+        [5, 5, 13, 13, 5, 5],
+        [5, 5, 13, 13, 5, 5],
+        [0, 5, 5, 5, 5, 0]
+      ], 6, 6, CATEGORY_ITEM, { paletteTab: "Items", displayName: "Coin" });
+      
+      // TILE_ID 31: Red_Mushroom_Sprite (Red mushroom, 8×7 pixels)
+      addTile(32, "Red_Mushroom_Sprite", [
+        [0, 2, 2, 2, 2, 2, 2, 0],
+        [2, 2, 6, 2, 2, 6, 2, 2],
+        [2, 6, 2, 2, 2, 2, 6, 2],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 1, 1, 0, 0, 1, 1, 0]
+      ], 8, 7, CATEGORY_ITEM, { paletteTab: "Items", displayName: "Mushroom" });
+
+      // TILE_ID 28: Green_Mushroom_Sprite (Green 1-up mushroom, 8×7 pixels)
+      addTile(28, "Green_Mushroom_Sprite", [
+        [0,23,23,23,23,23,23,0],
+        [23,23,6,23,23,6,23,23],
+        [23,6,23,23,23,23,6,23],
+        [23,23,23,23,23,23,23,23],
+        [0,1,1,1,1,1,1,0],
+        [0,1,1,1,1,1,1,0],
+        [0,1,1,0,0,1,1,0]
+      ], 8, 7, CATEGORY_ITEM, { paletteTab: "Items", displayName: "1UP" });
+
+      // MOB: Goomba (official paintable decoration)
+      // TILE_ID 42: Mob_Goomba (7x8)
+      addTile(42, "Mob_Goomba", [
+        [0,15,15,15,15,15,0],
+        [15,15,6,15,6,15,15],
+        [15,6,20,15,20,6,15],
+        [15,15,15,15,15,15,15],
+        [15,15,15,15,15,15,15],
+        [0,0,13,13,13,0,0],
+        [0,0,13,13,13,0,0],
+        [0,3,3,0,3,3,0]
+      ], 7, 8, CATEGORY_MOB, { paletteTab: "Enemies", displayName: "Goomba", isOverlayMob: true, anchor: "feet" });
+
+      // MOB: Koopa Troopa (terrain-spawn mob tile)
+      // TILE_ID 57: Mob_Koopa_Troopa (11x19)
+      addTile(TILE_ID_MOB_KOOPA_TROOPA, "Mob_Koopa_Troopa", [
+        [ 0, 0, 6, 6, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 20, 6, 6, 6, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 6, 6, 6, 6, 5, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 6, 6, 5, 5, 5, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0 ],
+        [ 5, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0 ],
+        [ 0, 5, 5, 5, 5, 19, 19, 19, 0, 0, 0 ],
+        [ 0, 0, 5, 5, 19, 18, 18, 18, 19, 0, 0 ],
+        [ 0, 0, 6, 5, 19, 18, 18, 18, 18, 19, 0 ],
+        [ 0, 5, 5, 5, 19, 18, 18, 18, 18, 18, 19 ],
+        [ 0, 5, 5, 5, 19, 18, 18, 18, 18, 18, 19 ],
+        [ 0, 0, 5, 5, 6, 18, 18, 18, 18, 18, 19 ],
+        [ 0, 0, 0, 5, 5, 18, 18, 18, 18, 19, 0 ],
+        [ 0, 0, 0, 0, 5, 6, 18, 18, 19, 0, 0 ],
+        [ 0, 0, 0, 0, 18, 19, 19, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 18, 18, 18, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 6, 18, 18, 18, 0, 0, 0, 0, 0 ]
+      ], 11, 19, CATEGORY_MOB, { paletteTab: "Enemies", displayName: "Koopa", isOverlayMob: true, anchor: "bottom" });
+
+      // MOB: Piranha Plant (2-wide render-only overlay; can be placed on top of tunnels)
+      // TILE_ID 45: Mob_Piranha_Plant (17x29) anchor/left
+      // TILE_ID 46: helper/right (invisible; not in palette)
+      addTile(TILE_ID_MOB_PIRANHA_PLANT_L, "Piranha Plant (2-wide)", [
+        [ 0, 0, 0, 0, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 20, 6, 6, 6, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 20, 6, 6, 6, 20, 2, 2, 20, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 20, 6, 6, 20, 2, 2, 2, 20, 20, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 6, 20, 6, 6, 6, 20, 2, 2, 2, 6, 20, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 20, 6, 6, 20, 2, 2, 2, 6, 6, 20, 0, 0 ],
+        [ 0, 0, 0, 0, 6, 20, 6, 6, 6, 20, 2, 2, 2, 2, 20, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 20, 6, 6, 20, 2, 2, 2, 2, 2, 20, 0 ],
+        [ 0, 0, 0, 0, 0, 6, 20, 6, 6, 6, 20, 2, 2, 2, 2, 20, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 20, 6, 6, 20, 2, 2, 2, 2, 20, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 6, 20, 6, 6, 20, 2, 6, 6, 2, 20, 0 ],
+        [ 0, 0, 6, 0, 6, 0, 0, 20, 6, 6, 20, 2, 6, 6, 2, 20, 0 ],
+        [ 0, 20, 20, 20, 20, 20, 20, 6, 6, 6, 20, 2, 2, 2, 2, 20, 0 ],
+        [ 20, 6, 6, 6, 6, 6, 6, 6, 6, 6, 20, 2, 2, 2, 2, 20, 0 ],
+        [ 20, 6, 6, 6, 6, 6, 6, 6, 6, 20, 2, 2, 2, 2, 2, 20, 0 ],
+        [ 0, 20, 6, 20, 20, 20, 20, 20, 20, 2, 2, 2, 2, 2, 20, 0, 0 ],
+        [ 0, 0, 20, 20, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 20, 0, 0 ],
+        [ 0, 0, 0, 0, 20, 2, 6, 2, 2, 2, 6, 6, 2, 20, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 20, 20, 2, 2, 2, 6, 20, 20, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 18, 18, 0, 0, 0, 18, 18, 23, 19, 0, 0, 0, 18, 18, 0 ],
+        [ 0, 18, 18, 18, 18, 0, 0, 18, 18, 23, 19, 0, 18, 18, 18, 18, 18 ],
+        [ 0, 19, 23, 18, 18, 0, 0, 18, 18, 23, 19, 18, 18, 18, 18, 23, 19 ],
+        [ 0, 19, 23, 23, 18, 18, 0, 18, 18, 23, 19, 18, 18, 23, 23, 23, 19 ],
+        [ 0, 19, 23, 23, 23, 18, 18, 18, 18, 23, 19, 18, 23, 23, 23, 19, 0 ],
+        [ 0, 0, 19, 23, 23, 23, 18, 18, 18, 23, 19, 23, 23, 19, 19, 0, 0 ],
+        [ 0, 0, 0, 19, 19, 23, 23, 23, 18, 23, 19, 19, 19, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 19, 19, 18, 18, 23, 19, 0, 0, 0, 0, 0, 0 ],
+        [ 0, 0, 0, 0, 0, 0, 0, 18, 18, 23, 19, 0, 0, 0, 0, 0, 0 ]
+      ], 17, 29, CATEGORY_MOB, { paletteTab: "Enemies", displayName: "Piranha (2-wide)", isOverlayMob: true, anchor: "bottom", isStamp2Wide: true });
+
+      // MOB/MARKER: Mario Spawn (overlay marker; only one should exist)
+      // TILE_ID 47: Mario spawn marker (14x18), uses heroStand sprite
+      addTile(TILE_ID_MOB_MARIO_SPAWN, "Mario Spawn (place in the air tile above ground)", [
+        [ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0 ],
+        [ 0,0,0,0, 2,2,2,2, 2,0,0,0, 0,0 ],
+        [ 0,0,0,2, 2,2,2,2, 2,2,0,0, 0,0 ],
+        [ 0,0,0,2, 2,2,2,2, 2,2,0,0, 0,0 ],
+        [ 0,0,3,3, 1,6,1,6, 1,3,3,0, 0,0 ],
+        [ 0,0,3,1, 1,3,3,3, 1,1,3,0, 0,0 ],
+        [ 0,0,0,1, 1,1,1,1, 1,1,0,0, 0,0 ],
+        [ 0,0,2,2, 2,2,2,2, 2,2,2,0, 0,0 ],
+        [ 0,2,2,2, 5,4,4,4, 5,2,2,2, 0,0 ],
+        [ 0,2,2,4, 4,4,4,4, 4,4,2,2, 0,0 ],
+        [ 0,6,2,4, 4,4,4,4, 4,4,2,6, 0,0 ],
+        [ 0,0,0,4, 4,4,0,4, 4,4,0,0, 0,0 ],
+        [ 0,0,0,4, 4,0,0,0, 4,4,0,0, 0,0 ],
+        [ 0,0,0,3, 3,3,0,3, 3,3,0,0, 0,0 ],
+        [ 0,0,0,3, 3,3,0,3, 3,3,0,0, 0,0 ],
+        [ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0 ],
+        [ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0 ],
+        [ 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0 ]
+      ], 14, 18, CATEGORY_MOB, { paletteTab: "Markers", displayName: "Mario Spawn", isOverlayMob: true, anchor: "feet" });
+
+      tileMap = createEmptyMap(MAP_TILES_W, MAP_TILES_H);
+      selectedTileId = 1; // Ground
+      currentPaletteTab = "Ground";
+      catButtons.forEach(b => {
+        b.classList.toggle('active', (b.getAttribute('data-tab') || "") === currentPaletteTab);
+      });
+      updateScrollMax();
+      buildTilePalette();
+      redraw();
+    }
+
+    // ===================================
+    // INIT
+    // ===================================
+    function init() {
+      // start with default ground tiles so you can draw right away
+      loadDefaultGroundTiles();
+      updateScrollMax();
+      redraw();
+    }
+
+    init();
+  </script>
+</body>
+</html>

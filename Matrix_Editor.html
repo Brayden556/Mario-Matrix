@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>192×64 Matrix / HUD Editor</title>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      gap: 16px;
+      padding: 12px;
+    }
+    #left {
+      flex: 0 0 auto;
+    }
+    #right {
+      flex: 0 0 430px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    canvas {
+      border: 1px solid #555;
+      image-rendering: pixelated;
+      cursor: crosshair;
+      background: #000;
+    }
+    h2 {
+      margin: 4px 0;
+      font-size: 16px;
+    }
+    .palette-row {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 2px solid #444;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    .swatch.selected {
+      border-color: #fff;
+      box-shadow: 0 0 4px #fff;
+    }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      box-sizing: border-box;
+    }
+    button {
+      background: #333;
+      color: #eee;
+      border: 1px solid #666;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover {
+      background: #444;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    label {
+      font-size: 12px;
+    }
+    input[type="number"],
+    input[type="text"],
+    select {
+      width: 64px;
+      padding: 2px 4px;
+      font-size: 12px;
+      background: #000;
+      color: #eee;
+      border: 1px solid #555;
+      border-radius: 3px;
+    }
+    input[type="text"] {
+      width: 120px;
+    }
+    select {
+      width: 120px;
+    }
+    small {
+      font-size: 11px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="left">
+    <canvas id="canvas"></canvas>
+    <div style="margin-top:4px;">
+      <small>
+        Left-click: paint • Right-click: erase • Drag to draw.
+        Top band is ideal for HUD. Vertical guide lines mark panel splits at x=64 and x=128.
+      </small>
+    </div>
+  </div>
+
+  <div id="right">
+    <h2>Palette (index → color)</h2>
+    <div class="palette-row" id="palette"></div>
+    <small>
+      Index 0 = off/empty. Arrays use palette indices; map them to RGB in your Arduino code.
+    </small>
+
+    <div class="row" style="margin-top:8px;">
+      <button id="clearBtn">Clear (set all to 0)</button>
+    </div>
+
+    <!-- ───────────── Text tools ───────────── -->
+    <h2>Text tools</h2>
+    <div class="row">
+      <label>Text:
+        <input type="text" id="textInput" value="PAUSED" />
+      </label>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <label>X:
+        <input type="number" id="textX" value="70" />
+      </label>
+      <label>Y:
+        <input type="number" id="textY" value="0" />
+      </label>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <button id="renderTextBtn">Render Mario HUD text</button>
+    </div>
+    <small>
+      Uses a fixed Mario HUD font (11px tall) that matches the example <code>Mario_Lives_Array</code>.  
+      Text is drawn with the <b>currently selected palette index</b>.
+    </small>
+
+    <h2>Measure tool</h2>
+    <div class="row">
+      <button id="measureToggleBtn">Measure mode: OFF</button>
+    </div>
+    <small id="measureInfo">
+      Click "Measure mode" to turn it on. In measure mode, left-click once to set a start cell, then left-click again to set an end cell. Width/height will be shown here.
+    </small>
+
+    <h2>Import existing design</h2>
+    <textarea id="importText" spellcheck="false"></textarea>
+    <div class="row">
+      <label>Offset X:
+        <input type="number" id="offsetX" value="0" />
+      </label>
+      <label>Offset Y:
+        <input type="number" id="offsetY" value="0" />
+      </label>
+      <button id="importBtn">Import with offsets</button>
+      <button id="importOriginBtn">Import at saved origin</button>
+    </div>
+    <small>
+      Paste either:
+      <br>• Raw numbers (0,1,2,...) or
+      <br>• A full C array like <code>static const uint8_t hero[18][14] PROGMEM = { ... };</code>.
+      <br>Dimensions like <code>[18][14]</code> are detected automatically.
+      <br>If the text includes a comment like <code>// top-left on 192x64: (x=0, y=0)</code>,
+      the "Import at saved origin" button will use that position.
+    </small>
+
+    <h2>Exported C code</h2>
+    <div class="row">
+      <label>Base name:
+        <input type="text" id="spriteName" value="design" />
+      </label>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <button id="exportFullBtn">Export full 192×64 array</button>
+      <button id="exportSpriteBtn">Export sprite (bounding box)</button>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <label>HUD rows (from top):
+        <input type="number" id="hudRows" value="16" min="1" max="64" />
+      </label>
+      <button id="exportHudBtn">Export HUD (top N rows)</button>
+    </div>
+    <small>
+      Full 192×64 export is good for backgrounds or full-screen layouts.<br>
+      Sprite export uses only non-zero pixels and includes comments with origin and size.<br>
+      HUD export takes the top N rows as <code>uint8_t name[HUD_ROWS][192]</code>.
+    </small>
+
+    <textarea id="exportText" spellcheck="false" placeholder="Exported C will appear here..."></textarea>
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────────
+    // Core state
+    // ─────────────────────────────────────────────
+    const GRID_W = 192;
+    const GRID_H = 64;
+    const PIXEL_SIZE = 5;
+
+    const HARDWARE_OFFSET_X = 0;
+    const HARDWARE_OFFSET_Y = 0;
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = GRID_W * PIXEL_SIZE;
+    canvas.height = GRID_H * PIXEL_SIZE;
+
+    let grid = [];
+    for (let y = 0; y < GRID_H; y++) {
+      const row = [];
+      for (let x = 0; x < GRID_W; x++) row.push(0);
+      grid.push(row);
+    }
+
+    // Palette
+    const paletteColors = [
+      "#000000", // 0 - off
+      "#FFD2AA", // 1 - skin
+      "#E42020", // 2 - red
+      "#783C0A", // 3 - brown
+      "#006EDC", // 4 - blue
+      "#FFDC46", // 5 - yellow
+      "#FFFFFF", // 6 - white
+      "#808080", // 7 - gray
+      "#00FF00", // 8 - debug green
+      "#FF00FF", // 9 - debug magenta
+      "#7AC8FF", // 10 - sky light
+      "#4FA0FF", // 11 - sky mid / haze
+      "#3C80E0", // 12 - distant hills
+      "#F0D090", // 13 - dirt light
+      "#D0A060", // 14 - dirt mid
+      "#A07040", // 15 - dirt dark / spots
+      "#404070", // 16 - underground stone dark
+      "#7070A0", // 17 - underground stone mid
+      "#40C860", // 18 - pipe green light
+      "#208040", // 19 - pipe green dark
+      "#101010", // 20 - near-black (Bullet Bill body)
+      "#C0C0C0", // 21 - metal gray (Bullet rims / shine)
+      "#E85870", // 22 - mouth pink/red (Bullet / enemies)
+      "#20B060"  // 23 - grass highlight
+    ];
+
+    let currentColorIndex = 6; // default white for text
+
+    // ─────────────────────────────────────────────
+    // Measure tool state
+    // ─────────────────────────────────────────────
+    let measureMode = false;
+    let measureStart = null;  // { x, y } in grid coordinates
+    let measureEnd = null;    // { x, y } in grid coordinates
+
+    function updateMeasureInfo() {
+      const infoEl = document.getElementById("measureInfo");
+      if (!infoEl) return;
+
+      if (!measureStart) {
+        infoEl.textContent = "No measurement set.";
+        return;
+      }
+      if (!measureEnd) {
+        infoEl.textContent =
+          `Start: (${measureStart.x}, ${measureStart.y}) – click another cell to set end.`;
+        return;
+      }
+
+      const dx = measureEnd.x - measureStart.x;
+      const dy = measureEnd.y - measureStart.y;
+      const width  = Math.abs(dx) + 1;
+      const height = Math.abs(dy) + 1;
+
+      infoEl.textContent =
+        `From (${measureStart.x}, ${measureStart.y}) to (${measureEnd.x}, ${measureEnd.y}) → ` +
+        `width ${width}px, height ${height}px, Δx ${dx}, Δy ${dy}`;
+    }
+
+    // ─────────────────────────────────────────────
+    // Mario HUD font (11px tall)
+    // Reverse-engineered from Mario_Lives_Array to match HUD text.
+    // Each glyph: { width: N, rows: [11 arrays of 0/1] }
+    // ─────────────────────────────────────────────
+    const MARIO_FONT_HEIGHT = 11;
+    const MARIO_FONT_SPACING = 1; // horizontal spacing between glyphs
+
+    const MarioFont = {
+      'M': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,1,0,1],
+          [1,0,1,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'A': {
+        width: 4,
+        rows: [
+          [0,1,1,0],
+          [1,0,0,1],
+          [1,1,1,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'R': {
+        width: 4,
+        rows: [
+          [1,1,0,0],
+          [1,0,0,1],
+          [1,1,1,0],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'I': {
+        width: 4,
+        rows: [
+          [1,1,1,0],
+          [0,1,0,0],
+          [0,1,0,0],
+          [0,1,0,0],
+          [1,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'O': {
+        width: 4,
+        rows: [
+          [0,1,1,0],
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'X': {
+        width: 3,
+        rows: [
+          [0,1,0],
+          [1,0,1],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0]
+        ]
+      },
+      '0': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [1,0,1],
+          [1,0,1],
+          [1,0,1],
+          [1,1,1]
+        ]
+      },
+      '1': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,1,0],
+          [1,1,0],
+          [0,1,0],
+          [0,1,0],
+          [1,1,1]
+        ]
+      },
+      '2': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [0,0,1],
+          [1,1,1],
+          [1,0,0],
+          [1,1,1]
+        ]
+      },
+      '3': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [0,0,1],
+          [1,1,1],
+          [0,0,1],
+          [1,1,1]
+        ]
+      },
+      '4': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,0,1],
+          [1,0,1],
+          [1,1,1],
+          [0,0,1],
+          [0,0,1]
+        ]
+      },
+      '5': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [1,0,0],
+          [1,1,1],
+          [0,0,1],
+          [1,1,1]
+        ]
+      },
+      '6': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [1,0,0],
+          [1,1,1],
+          [1,0,1],
+          [1,1,1]
+        ]
+      },
+      '7': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [0,0,1],
+          [0,0,1],
+          [0,0,1],
+          [0,0,1]
+        ]
+      },
+      '8': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [1,0,1],
+          [1,1,1],
+          [1,0,1],
+          [1,1,1]
+        ]
+      },
+      '9': {
+        width: 3,
+        rows: [
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [0,0,0],
+          [1,1,1],
+          [1,0,1],
+          [1,1,1],
+          [0,0,1],
+          [1,1,1]
+        ]
+      },
+      'B': {
+        width: 4,
+        rows: [
+          [1,1,1,0],
+          [1,0,0,1],
+          [1,1,1,0],
+          [1,0,0,1],
+          [1,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'C': {
+        width: 4,
+        rows: [
+          [0,1,1,1],
+          [1,0,0,0],
+          [1,0,0,0],
+          [1,0,0,0],
+          [0,1,1,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'D': {
+        width: 4,
+        rows: [
+          [1,1,0,0],
+          [1,0,1,0],
+          [1,0,0,1],
+          [1,0,1,0],
+          [1,1,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'E': {
+        width: 4,
+        rows: [
+          [1,1,1,1],
+          [1,0,0,0],
+          [1,1,1,0],
+          [1,0,0,0],
+          [1,1,1,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'F': {
+        width: 4,
+        rows: [
+          [1,1,1,1],
+          [1,0,0,0],
+          [1,1,1,0],
+          [1,0,0,0],
+          [1,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'G': {
+        width: 4,
+        rows: [
+          [0,1,1,1],
+          [1,0,0,0],
+          [1,0,1,1],
+          [1,0,0,1],
+          [0,1,1,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'H': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,1,1,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'J': {
+        width: 4,
+        rows: [
+          [0,0,1,1],
+          [0,0,0,1],
+          [0,0,0,1],
+          [1,0,0,1],
+          [0,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'K': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,0,1,0],
+          [1,1,0,0],
+          [1,0,1,0],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'L': {
+        width: 4,
+        rows: [
+          [1,0,0,0],
+          [1,0,0,0],
+          [1,0,0,0],
+          [1,0,0,0],
+          [1,1,1,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'N': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,1,0,1],
+          [1,0,1,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'P': {
+        width: 4,
+        rows: [
+          [1,1,1,0],
+          [1,0,0,1],
+          [1,1,1,0],
+          [1,0,0,0],
+          [1,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'Q': {
+        width: 4,
+        rows: [
+          [0,1,1,0],
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,0,1,0],
+          [0,1,0,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'S': {
+        width: 4,
+        rows: [
+          [0,1,1,1],
+          [1,0,0,0],
+          [0,1,1,0],
+          [0,0,0,1],
+          [1,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'T': {
+        width: 4,
+        rows: [
+          [1,1,1,1],
+          [0,1,0,0],
+          [0,1,0,0],
+          [0,1,0,0],
+          [0,1,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'U': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,1,1,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'V': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,1,1,0],
+          [0,1,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'W': {
+        width: 5,
+        rows: [
+          [1,0,0,0,1],
+          [1,0,1,0,1],
+          [1,0,1,0,1],
+          [1,1,0,1,1],
+          [1,0,0,0,1],
+          [0,0,0,0,0],
+          [0,0,0,0,0],
+          [0,0,0,0,0],
+          [0,0,0,0,0],
+          [0,0,0,0,0],
+          [0,0,0,0,0]
+        ]
+      },
+      'Y': {
+        width: 4,
+        rows: [
+          [1,0,0,1],
+          [1,0,0,1],
+          [0,1,1,0],
+          [0,1,0,0],
+          [0,1,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      'Z': {
+        width: 4,
+        rows: [
+          [1,1,1,1],
+          [0,0,0,1],
+          [0,1,1,0],
+          [1,0,0,0],
+          [1,1,1,1],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0],
+          [0,0,0,0]
+        ]
+      },
+      ' ': {
+        width: 2,
+        rows: [
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0],
+          [0,0]
+        ]
+      }
+    };
+
+    // Render a full string using the Mario HUD font.
+    function renderTextToGrid() {
+      const str = (document.getElementById("textInput").value || "").toUpperCase();
+      if (!str) return;
+
+      let x = parseInt(document.getElementById("textX").value, 10);
+      const y = parseInt(document.getElementById("textY").value, 10);
+      if (isNaN(x)) x = 0;
+      if (isNaN(y)) y = 0;
+
+      const colorIndex = currentColorIndex;
+
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        const glyph = MarioFont[ch];
+        if (!glyph) {
+          // Unknown character: treat as narrow space
+          x += 2;
+          continue;
+        }
+
+        // Draw the glyph
+        for (let row = 0; row < MARIO_FONT_HEIGHT; row++) {
+          const rowData = glyph.rows[row];
+          for (let col = 0; col < glyph.width; col++) {
+            if (rowData[col]) {
+              const gx = x + col;
+              const gy = y + row;
+              if (gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H) {
+                grid[gy][gx] = colorIndex;
+              }
+            }
+          }
+        }
+
+        // Advance x position for next character
+        x += glyph.width + MARIO_FONT_SPACING;
+      }
+
+      drawGrid();
+    }
+
+
+
+    // ─────────────────────────────────────────────
+    // Palette UI
+    // ─────────────────────────────────────────────
+    const paletteDiv = document.getElementById("palette");
+    function buildPalette() {
+      paletteDiv.innerHTML = "";
+      paletteColors.forEach((color, index) => {
+        const div = document.createElement("div");
+        div.className = "swatch" + (index === currentColorIndex ? " selected" : "");
+        div.style.background = color;
+        div.title = "Index " + index;
+        div.addEventListener("click", () => {
+          currentColorIndex = index;
+          updatePaletteSelection();
+        });
+        paletteDiv.appendChild(div);
+      });
+    }
+    function updatePaletteSelection() {
+      Array.from(paletteDiv.children).forEach((child, idx) => {
+        if (idx === currentColorIndex) child.classList.add("selected");
+        else child.classList.remove("selected");
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // Rendering of the grid
+    // ─────────────────────────────────────────────
+    function drawGrid() {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < GRID_H; y++) {
+        for (let x = 0; x < GRID_W; x++) {
+          const idx = grid[y][x];
+          if (idx !== 0) {
+            const color = paletteColors[idx] || "#000000";
+            ctx.fillStyle = color;
+            ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+          }
+        }
+      }
+
+      ctx.strokeStyle = "rgba(80,80,80,0.25)";
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= GRID_W; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * PIXEL_SIZE + 0.5, 0);
+        ctx.lineTo(x * PIXEL_SIZE + 0.5, GRID_H * PIXEL_SIZE);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= GRID_H; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * PIXEL_SIZE + 0.5);
+        ctx.lineTo(GRID_W * PIXEL_SIZE, y * PIXEL_SIZE + 0.5);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 1;
+      [64, 128].forEach(px => {
+        const xpix = px * PIXEL_SIZE + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(xpix, 0);
+        ctx.lineTo(xpix, GRID_H * PIXEL_SIZE);
+        ctx.stroke();
+      });
+
+      // Measurement rectangle overlay (if active)
+      if (measureStart && measureEnd) {
+        const minX = Math.min(measureStart.x, measureEnd.x);
+        const maxX = Math.max(measureStart.x, measureEnd.x);
+        const minY = Math.min(measureStart.y, measureEnd.y);
+        const maxY = Math.max(measureStart.y, measureEnd.y);
+
+        const xPix = minX * PIXEL_SIZE + 0.5;
+        const yPix = minY * PIXEL_SIZE + 0.5;
+        const wPix = (maxX - minX + 1) * PIXEL_SIZE;
+        const hPix = (maxY - minY + 1) * PIXEL_SIZE;
+
+        ctx.strokeStyle = "rgba(0, 255, 0, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(xPix, yPix, wPix, hPix);
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // Canvas interaction
+    // ─────────────────────────────────────────────
+    let isDrawing = false;
+    let drawValue = currentColorIndex;
+
+    function canvasPosToCell(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((evt.clientX - rect.left) / PIXEL_SIZE);
+      const y = Math.floor((evt.clientY - rect.top) / PIXEL_SIZE);
+      return { x, y };
+    }
+
+    canvas.addEventListener("mousedown", (evt) => {
+      evt.preventDefault();
+      const { x, y } = canvasPosToCell(evt);
+      if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return;
+
+      // Measurement handling
+      if (measureMode && evt.button === 0) {
+        // First click → start, second click → end (then you can click again to start a new measure)
+        if (!measureStart || (measureStart && measureEnd)) {
+          measureStart = { x, y };
+          measureEnd = null;
+        } else {
+          measureEnd = { x, y };
+        }
+        updateMeasureInfo();
+        drawGrid();
+        return; // do NOT modify pixels in measure mode
+      }
+
+      // Normal drawing (only when not in measure mode)
+      isDrawing = true;
+      drawValue = evt.button === 2 ? 0 : currentColorIndex;
+      grid[y][x] = drawValue;
+      drawGrid();
+    });
+
+    canvas.addEventListener("mousemove", (evt) => {
+      if (!isDrawing || measureMode) return;
+      const { x, y } = canvasPosToCell(evt);
+      if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return;
+      grid[y][x] = drawValue;
+      drawGrid();
+    });
+
+    canvas.addEventListener("mouseup", () => {
+      isDrawing = false;
+    });
+    canvas.addEventListener("mouseleave", () => {
+      isDrawing = false;
+    });
+    canvas.addEventListener("contextmenu", (evt) => evt.preventDefault());
+
+    // ─────────────────────────────────────────────
+    // Clear
+    // ─────────────────────────────────────────────
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      for (let y = 0; y < GRID_H; y++) {
+        for (let x = 0; x < GRID_W; x++) grid[y][x] = 0;
+      }
+      drawGrid();
+    });
+
+    // ─────────────────────────────────────────────
+    // Import logic
+    // ─────────────────────────────────────────────
+    function importDesignCore(textRaw, offX, offY) {
+      if (!textRaw) return;
+
+      // 1) Detect declared dims from [H][W]
+      let spriteH = null;
+      let spriteW = null;
+      const dimMatch = textRaw.match(/\[(\d+)\]\s*\[(\d+)\]/);
+      if (dimMatch) {
+        spriteH = parseInt(dimMatch[1], 10);
+        spriteW = parseInt(dimMatch[2], 10);
+      }
+
+      // 2) Work only from the first '{' onward to avoid grabbing comment/header numbers
+      let pixelText = textRaw;
+      const braceIdx = textRaw.indexOf("{");
+      if (braceIdx !== -1) pixelText = textRaw.slice(braceIdx);
+
+      // 3) Try brace-row parsing first: { ... }, { ... }, ...
+      const rowMatches = pixelText.match(/\{[^{}]*\}/g) || [];
+      let rows = [];
+      if (rowMatches.length >= 2) {
+        for (const r of rowMatches) {
+          const nums = (r.match(/-?\d+/g) || []).map(n => parseInt(n, 10));
+          if (nums.length > 0) rows.push(nums);
+        }
+      }
+
+      // Helper: pad/truncate rows to exactly (H x W)
+      function normalizeRowsTo(H, W, inputRows) {
+        const out = [];
+
+        // Clamp each row width
+        for (let y = 0; y < inputRows.length; y++) {
+          const r = inputRows[y].slice(0, W);
+          if (r.length < W) r.push(...new Array(W - r.length).fill(0));
+          out.push(r);
+        }
+
+        // If missing rows, add blank rows
+        while (out.length < H) {
+          out.push(new Array(W).fill(0));
+        }
+
+        // If too many rows, truncate
+        if (out.length > H) out.length = H;
+
+        return out;
+      }
+
+      // 4) Determine final spriteH/spriteW
+      // If declared, we will TRUST the declared dims and PAD/TRUNCATE to fit.
+      // If not declared, infer from rows or numbers.
+      let usedPad = false;
+      let nums = [];
+
+      if (rows.length >= 1) {
+        if (spriteH == null || spriteW == null) {
+          // Infer from rows
+          spriteH = rows.length;
+          spriteW = Math.max(...rows.map(r => r.length));
+        }
+
+        const beforeH = rows.length;
+        const beforeW = Math.max(...rows.map(r => r.length));
+
+        // Normalize to declared/inferred dims
+        const norm = normalizeRowsTo(spriteH, spriteW, rows);
+
+        if (beforeH !== spriteH || beforeW !== spriteW) usedPad = true;
+
+        // Flatten
+        for (let y = 0; y < spriteH; y++) {
+          for (let x = 0; x < spriteW; x++) {
+            nums.push(norm[y][x] || 0);
+          }
+        }
+      } else {
+        // 5) Fallback: raw number scan (supports raw paste)
+        nums = (pixelText.match(/-?\d+/g) || []).map(n => parseInt(n, 10));
+        if (nums.length === 0) {
+          alert("No numbers found to import.");
+          return;
+        }
+
+        if (spriteH === null || spriteW === null) {
+          const total = nums.length;
+          const n = Math.round(Math.sqrt(total));
+          if (n * n === total) {
+            spriteH = spriteW = n;
+          } else {
+            // Default to 8 wide if unknown
+            spriteW = 8;
+            spriteH = Math.floor(total / spriteW);
+          }
+        }
+
+        const needed = spriteW * spriteH;
+        if (nums.length < needed) {
+          // PAD with zeros instead of failing
+          nums.push(...new Array(needed - nums.length).fill(0));
+          usedPad = true;
+        } else if (nums.length > needed) {
+          // TRUNCATE extra numbers
+          nums = nums.slice(0, needed);
+        }
+      }
+
+      // 6) Import into grid
+      let idx = 0;
+      for (let y = 0; y < spriteH; y++) {
+        for (let x = 0; x < spriteW; x++) {
+          const gx = offX + x;
+          const gy = offY + y;
+          if (gy >= 0 && gy < GRID_H && gx >= 0 && gx < GRID_W) {
+            grid[gy][gx] = nums[idx] || 0;
+          }
+          idx++;
+        }
+      }
+
+      drawGrid();
+
+      // 7) Friendly warning (non-blocking)
+      if (usedPad) {
+        alert(
+          "Imported with padding/truncation.\n\n" +
+          "Target size: " + spriteW + "x" + spriteH + "\n" +
+          "Tip: For perfect results, export from this editor and re-import that output."
+        );
+      }
+    }
+
+    document.getElementById("importBtn").addEventListener("click", () => {
+      const textRaw = document.getElementById("importText").value.trim();
+      if (!textRaw) return;
+
+      const offX = parseInt(document.getElementById("offsetX").value, 10) || 0;
+      const offY = parseInt(document.getElementById("offsetY").value, 10) || 0;
+
+      importDesignCore(textRaw, offX, offY);
+    });
+
+    document.getElementById("importOriginBtn").addEventListener("click", () => {
+      const textRaw = document.getElementById("importText").value.trim();
+      if (!textRaw) return;
+
+      let offX = 0;
+      let offY = 0;
+
+      const originMatch = textRaw.match(/top-left on\s+\d+\s*[x×]\s*\d+:\s*\(x=(\d+),\s*y=(\d+)\)/i);
+      if (originMatch) {
+        offX = parseInt(originMatch[1], 10) || 0;
+        offY = parseInt(originMatch[2], 10) || 0;
+      } else {
+        alert("No 'top-left' origin comment found; using 0,0.");
+      }
+
+      importDesignCore(textRaw, offX, offY);
+    });
+
+    // ─────────────────────────────────────────────
+    // Export full 192×64
+    // ─────────────────────────────────────────────
+    function exportFull192x64() {
+      const nameInput = document.getElementById("spriteName");
+      const base = (nameInput.value || "design").trim();
+      const name = base;
+
+      let lines = [];
+      lines.push("static const uint8_t " + name + "[" + GRID_H + "][" + GRID_W + "] = {");
+      for (let y = 0; y < GRID_H; y++) {
+        let row = "  { " + grid[y].join(", ") + " }";
+        if (y < GRID_H - 1) row += ",";
+        lines.push(row);
+      }
+      lines.push("};");
+      document.getElementById("exportText").value = lines.join("\n");
+    }
+    document.getElementById("exportFullBtn").addEventListener("click", exportFull192x64);
+
+    // ─────────────────────────────────────────────
+    // Export sprite (bounding box)
+    // ─────────────────────────────────────────────
+    function exportSprite() {
+      const nameInput = document.getElementById("spriteName");
+      const base = (nameInput.value || "design").trim();
+      const name = base;
+
+      let minX = GRID_W, minY = GRID_H, maxX = -1, maxY = -1;
+      for (let y = 0; y < GRID_H; y++) {
+        for (let x = 0; x < GRID_W; x++) {
+          if (grid[y][x] !== 0) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX === -1) {
+        document.getElementById("exportText").value =
+          "// Sprite area is empty (all zeros).";
+        return;
+      }
+
+      const width  = maxX - minX + 1;
+      const height = maxY - minY + 1;
+
+      const outX = minX + HARDWARE_OFFSET_X;
+      const outY = minY + HARDWARE_OFFSET_Y;
+
+      let lines = [];
+      lines.push("// top-left on 192x64: (x=" + outX + ", y=" + outY + ")");
+      lines.push("// size: " + width + "x" + height);
+      lines.push("static const uint8_t " + name + "[" + height + "][" + width + "] = {");
+
+      for (let y = minY; y <= maxY; y++) {
+        let rowVals = [];
+        for (let x = minX; x <= maxX; x++) {
+          rowVals.push(grid[y][x]);
+        }
+        let row = "  { " + rowVals.join(", ") + " }";
+        if (y < maxY) row += ",";
+        lines.push(row);
+      }
+      lines.push("};");
+      lines.push("");
+      lines.push("// blit call:");
+      lines.push(
+        "blitHudArray((const uint8_t*)&" + name + "[0][0], " +
+        width + ", " + height + ", " + outX + ", " + outY + ");"
+      );
+
+      document.getElementById("exportText").value = lines.join("\n");
+    }
+    document.getElementById("exportSpriteBtn").addEventListener("click", exportSprite);
+
+    // ─────────────────────────────────────────────
+    // Export HUD top N rows
+    // ─────────────────────────────────────────────
+    function exportHud() {
+      const nameInput = document.getElementById("spriteName");
+      const base = (nameInput.value || "hudSprite").trim();
+      const name = base;
+
+      let hudRows = parseInt(document.getElementById("hudRows").value, 10);
+      if (isNaN(hudRows) || hudRows < 1) hudRows = 1;
+      if (hudRows > GRID_H) hudRows = GRID_H;
+
+      let lines = [];
+      lines.push("// HUD band from top " + hudRows + " rows of 192x64");
+      lines.push("static const uint8_t " + name + "[" + hudRows + "][" + GRID_W + "] = {");
+
+      for (let y = 0; y < hudRows; y++) {
+        let row = "  { " + grid[y].join(", ") + " }";
+        if (y < hudRows - 1) row += ",";
+        lines.push(row);
+      }
+
+      lines.push("};");
+      document.getElementById("exportText").value = lines.join("\n");
+    }
+    document.getElementById("exportHudBtn").addEventListener("click", exportHud);
+
+    // ─────────────────────────────────────────────
+    // Text rendering button
+    // ─────────────────────────────────────────────
+    document
+      .getElementById("renderTextBtn")
+      .addEventListener("click", renderTextToGrid);
+
+    // ─────────────────────────────────────────────
+    // Measure mode toggle
+    // ─────────────────────────────────────────────
+    const measureToggleBtn = document.getElementById("measureToggleBtn");
+    if (measureToggleBtn) {
+      measureToggleBtn.addEventListener("click", () => {
+        measureMode = !measureMode;
+        // Clear old measurement whenever we toggle
+        measureStart = null;
+        measureEnd = null;
+        measureToggleBtn.textContent = measureMode
+          ? "Measure mode: ON"
+          : "Measure mode: OFF";
+        updateMeasureInfo();
+        drawGrid();
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // Init
+    // ─────────────────────────────────────────────
+    buildPalette();
+    drawGrid();
+    updateMeasureInfo();
+  </script>
+</body>
+</html>
